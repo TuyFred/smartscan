@@ -122,6 +122,7 @@ export function StartShopping() {
 }
 
 function SessionView({ allowScan }) {
+  const { triggerPaymentRequest, user } = useAuth();
   const [session, setSession] = useState(null);
   const [scanner, setScanner] = useState(false);
   const [error, setError] = useState('');
@@ -239,7 +240,20 @@ function SessionView({ allowScan }) {
         </button>
         <button
           type="button"
-          onClick={() => alert('Go to checkout area and tap your RFID card. Then authorize with PIN on this screen.')}
+          onClick={() => {
+            if (import.meta.env.DEV && session?.total_amount > 0) {
+              triggerPaymentRequest({
+                authorizationId: 'local-dev-payment',
+                customer: { full_name: user?.fullName || 'Customer' },
+                session: { session_code: session?.session_code || 'LOCAL-DEV' },
+                amountToPay: Number(session?.total_amount || 0),
+                cardBalance: Number(user?.cardBalance || 0),
+                cardUid: 'LOCAL-DEV',
+              });
+              return;
+            }
+            alert('Go to checkout area and tap your RFID card. Then authorize with PIN on this screen.');
+          }}
           className="rounded-xl bg-slate-900 px-4 py-2.5 font-semibold text-white"
         >
           Checkout (tap RFID)

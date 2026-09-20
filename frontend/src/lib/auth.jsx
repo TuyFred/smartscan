@@ -10,6 +10,21 @@ export function AuthProvider({ children }) {
   const [paymentRequest, setPaymentRequest] = useState(null);
   const [socket, setSocket] = useState(null);
 
+  const triggerPaymentRequest = useCallback((payload) => {
+    if (!payload) {
+      setPaymentRequest(null);
+      return;
+    }
+    setPaymentRequest({
+      authorizationId: payload.authorizationId || 'local-dev-demo',
+      customer: payload.customer || user || {},
+      session: payload.session || { session_code: 'LOCAL-DEV' },
+      amountToPay: Number(payload.amountToPay || 0),
+      cardBalance: Number(payload.cardBalance || 0),
+      cardUid: payload.cardUid || 'LOCAL-DEV',
+    });
+  }, [user]);
+
   const logout = useCallback(() => {
     localStorage.removeItem('smartscan_token');
     setUser(null);
@@ -64,7 +79,7 @@ export function AuthProvider({ children }) {
 
     s.on('connect', joinUserRoom);
     joinUserRoom();
-    s.on('payment:request', (payload) => setPaymentRequest(payload));
+    s.on('payment:request', (payload) => triggerPaymentRequest(payload));
     s.on('payment:success', () => setPaymentRequest(null));
     s.on('card:updated', () => {});
 
@@ -93,12 +108,13 @@ export function AuthProvider({ children }) {
       socket,
       paymentRequest,
       setPaymentRequest,
+      triggerPaymentRequest,
       refreshMe,
       logout,
       loginWithToken,
       isAuthenticated: Boolean(user),
     }),
-    [user, loading, socket, paymentRequest, refreshMe, logout]
+    [user, loading, socket, paymentRequest, refreshMe, logout, triggerPaymentRequest]
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
