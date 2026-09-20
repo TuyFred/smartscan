@@ -336,13 +336,15 @@ exports.listStoreCustomers = async (req, res) => {
 // RFID tap — identify only, NEVER deduct
 exports.rfidRead = async (req, res) => {
   try {
-    const { cardUid } = req.body;
-    if (!cardUid) return res.status(400).json({ success: false, message: 'cardUid required' });
+    const rawCardUid = req.body?.cardUid;
+    if (!rawCardUid) return res.status(400).json({ success: false, message: 'cardUid required' });
+
+    const cardUid = String(rawCardUid).trim().toUpperCase();
 
     const { data: card } = await supabase
       .from('customer_cards')
       .select('*, users!customer_cards_customer_id_fkey(id, full_name, email, phone, profile_image)')
-      .eq('card_uid', String(cardUid).toUpperCase())
+      .eq('card_uid', cardUid)
       .maybeSingle();
 
     if (!card) return res.status(404).json({ success: false, message: 'Unknown RFID card' });
