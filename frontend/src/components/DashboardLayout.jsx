@@ -5,7 +5,7 @@ import { useAuth } from '../lib/auth';
 import PaymentPopup from './PaymentPopup';
 
 export default function DashboardLayout({ title, links }) {
-  const { user, logout } = useAuth();
+  const { user, logout, paymentRequest } = useAuth();
   const navigate = useNavigate();
   const [open, setOpen] = useState(false);
 
@@ -106,6 +106,13 @@ export default function DashboardLayout({ title, links }) {
             </div>
           )}
         </header>
+
+        {paymentRequest && (
+          <div className="border-b border-amber-200 bg-amber-100 px-3 py-2 text-center text-sm font-semibold text-amber-900 sm:px-4">
+            Payment requested: {paymentRequest.amountToPay ? `${paymentRequest.amountToPay.toLocaleString()} RWF` : 'Review now'}
+          </div>
+        )}
+
         <main className="min-w-0 flex-1 overflow-x-hidden p-3 sm:p-4 md:p-6">
           <Outlet />
         </main>
