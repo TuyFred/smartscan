@@ -47,13 +47,33 @@ export function AuthProvider({ children }) {
     const liveSocketUrl = import.meta.env.VITE_SOCKET_URL || 'https://smartscan-p8j6.onrender.com';
     const s = io(liveSocketUrl, {
       transports: ['websocket', 'polling'],
+      reconnection: true,
+      reconnectionAttempts: Infinity,
+      reconnectionDelay: 500,
+      reconnectionDelayMax: 2000,
+      timeout: 20000,
     });
+
+    const restoreConnection = () => {
+      if (!s.connected) s.connect();
+    };
+
     s.emit('join', { userId: user.id, supermarketId: user.supermarketId });
     s.on('payment:request', (payload) => setPaymentRequest(payload));
     s.on('payment:success', () => setPaymentRequest(null));
     s.on('card:updated', () => {});
+
+    window.addEventListener('pageshow', restoreConnection);
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState === 'visible') restoreConnection();
+    });
+
     setSocket(s);
-    return () => s.disconnect();
+    return () => {
+      window.removeEventListener('pageshow', restoreConnection);
+      document.removeEventListener('visibilitychange', restoreConnection);
+      s.disconnect();
+    };
   }, [user?.id]);
 
   const loginWithToken = async (token, nextUser) => {
