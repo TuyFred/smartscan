@@ -44,7 +44,8 @@ export function AuthProvider({ children }) {
 
   useEffect(() => {
     if (!user) return undefined;
-    const s = io(import.meta.env.VITE_SOCKET_URL || '/', {
+    const liveSocketUrl = import.meta.env.VITE_SOCKET_URL || 'https://smartscan-p8j6.onrender.com';
+    const s = io(liveSocketUrl, {
       transports: ['websocket', 'polling'],
     });
     s.emit('join', { userId: user.id, supermarketId: user.supermarketId });

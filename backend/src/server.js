@@ -61,6 +61,10 @@ app.use(
   rateLimit({ windowMs: 15 * 60 * 1000, max: 100, standardHeaders: true, legacyHeaders: false })
 );
 
+app.get('/health', (_req, res) => {
+  res.send('ok');
+});
+
 app.get('/api/health', (_req, res) => {
   res.json({ success: true, service: 'SMARTSCAN API', time: new Date().toISOString() });
 });
