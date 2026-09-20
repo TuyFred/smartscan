@@ -54,11 +54,16 @@ export function AuthProvider({ children }) {
       timeout: 20000,
     });
 
+    const joinUserRoom = () => {
+      s.emit('join', { userId: user.id, supermarketId: user.supermarketId });
+    };
+
     const restoreConnection = () => {
       if (!s.connected) s.connect();
     };
 
-    s.emit('join', { userId: user.id, supermarketId: user.supermarketId });
+    s.on('connect', joinUserRoom);
+    joinUserRoom();
     s.on('payment:request', (payload) => setPaymentRequest(payload));
     s.on('payment:success', () => setPaymentRequest(null));
     s.on('card:updated', () => {});
