@@ -20,11 +20,23 @@ const extraOrigins = (process.env.CORS_ORIGINS || '')
   .map((s) => s.trim())
   .filter(Boolean);
 
+const localhostOrigins = ['http://localhost:5173', 'http://localhost:5174', 'http://localhost:5175'];
+const isLocalhostOrigin = (origin) => {
+  if (!origin) return true;
+  try {
+    const parsed = new URL(origin);
+    return ['localhost', '127.0.0.1', '0.0.0.0'].includes(parsed.hostname);
+  } catch {
+    return false;
+  }
+};
+
 module.exports = {
   port: process.env.PORT || 5000,
   nodeEnv: process.env.NODE_ENV || 'development',
   frontendUrl,
-  allowedOrigins: [...new Set([frontendUrl, ...extraOrigins, 'http://localhost:5173'])],
+  allowedOrigins: [...new Set([frontendUrl, ...extraOrigins, ...localhostOrigins])],
+  isLocalhostOrigin,
   jwtSecret: process.env.JWT_SECRET || 'smartscan_dev_secret',
   jwtExpiresIn: process.env.JWT_EXPIRES_IN || '7d',
   otpExpiresMinutes: Number(process.env.OTP_EXPIRES_MINUTES || 10),

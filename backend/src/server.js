@@ -45,7 +45,7 @@ app.use(helmet({ crossOriginResourcePolicy: { policy: 'cross-origin' } }));
 app.use(
   cors({
     origin(origin, callback) {
-      if (!origin || config.allowedOrigins.includes(origin)) {
+      if (!origin || config.allowedOrigins.includes(origin) || config.isLocalhostOrigin(origin)) {
         return callback(null, true);
       }
       return callback(new Error(`CORS blocked for origin: ${origin}`));

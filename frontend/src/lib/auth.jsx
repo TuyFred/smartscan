@@ -44,8 +44,8 @@ export function AuthProvider({ children }) {
 
   useEffect(() => {
     if (!user) return undefined;
-    const liveSocketUrl = import.meta.env.VITE_SOCKET_URL || 'https://smartscan-p8j6.onrender.com';
-    const s = io(liveSocketUrl, {
+    const socketUrl = import.meta.env.VITE_SOCKET_URL || (import.meta.env.DEV ? 'http://localhost:5000' : 'https://smartscan-p8j6.onrender.com');
+    const s = io(socketUrl, {
       transports: ['websocket', 'polling'],
       reconnection: true,
       reconnectionAttempts: Infinity,
