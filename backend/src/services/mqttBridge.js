@@ -35,6 +35,7 @@ client.on('message', async (topic, message) => {
     const raw = message.toString();
     const payload = JSON.parse(raw);
     const cardUid = String(payload.cardUid || '').trim().toUpperCase();
+    const deviceName = String(payload.device || payload.deviceName || '').trim();
     const deviceKey = String(payload.deviceKey || DEVICE_KEY).trim();
 
     if (!cardUid) {
@@ -42,16 +43,23 @@ client.on('message', async (topic, message) => {
       return;
     }
 
-    console.log(`[MQTT] Received card UID: ${cardUid}`);
+    console.log(`[MQTT] Received card UID: ${cardUid} from ${deviceName || 'unknown device'}`);
+
+    const headers = {
+      'Content-Type': 'application/json',
+    };
+
+    if (deviceKey) headers['x-device-key'] = deviceKey;
+    if (deviceName) headers['x-device-name'] = deviceName;
 
     const response = await axios.post(
       `${API_URL}/api/rfid/read`,
-      { cardUid },
       {
-        headers: {
-          'Content-Type': 'application/json',
-          'x-device-key': deviceKey,
-        },
+        cardUid,
+        ...(deviceName ? { device: deviceName } : {}),
+      },
+      {
+        headers,
         timeout: 10000,
       }
     );

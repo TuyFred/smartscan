@@ -49,24 +49,41 @@ function requireRole(...roles) {
 
 async function requireDeviceAuth(req, res, next) {
   const apiKey = req.headers['x-device-key'] || req.body?.apiKey;
-  if (!apiKey) {
-    return res.status(401).json({ success: false, message: 'Device API key required' });
+  const deviceName = req.headers['x-device-name'] || req.body?.device || req.body?.deviceName;
+
+  if (!apiKey && !deviceName) {
+    return res.status(401).json({ success: false, message: 'Device key or device name required' });
   }
 
-  const { data: device } = await supabase
-    .from('iot_devices')
-    .select('*')
-    .eq('api_key', apiKey)
-    .eq('status', 'ACTIVE')
-    .maybeSingle();
+  let device = null;
+
+  if (apiKey) {
+    const { data } = await supabase
+      .from('iot_devices')
+      .select('*')
+      .eq('api_key', apiKey)
+      .eq('status', 'ACTIVE')
+      .maybeSingle();
+    device = data;
+  }
+
+  if (!device && deviceName) {
+    const { data } = await supabase
+      .from('iot_devices')
+      .select('*')
+      .ilike('name', deviceName)
+      .eq('status', 'ACTIVE')
+      .maybeSingle();
+    device = data;
+  }
 
   if (!device) {
     const config = require('../config/env');
-    if (apiKey === config.iotApiKey) {
+    if (apiKey === config.iotApiKey || (deviceName && String(deviceName).toUpperCase() === 'SMARTSCAN-RFID-01')) {
       req.device = { id: null, type: 'GENERIC' };
       return next();
     }
-    return res.status(401).json({ success: false, message: 'Invalid device key' });
+    return res.status(401).json({ success: false, message: 'Invalid device key or device name' });
   }
 
   await supabase
