@@ -975,34 +975,77 @@ export function CashierHelp() {
 }
 
 export function CashierRfid() {
+  const { socket } = useAuth();
   const [uid, setUid] = useState('');
   const [data, setData] = useState(null);
   const [error, setError] = useState('');
+  const [waiting, setWaiting] = useState(false);
 
-  const read = async (e) => {
-    e.preventDefault();
+  useEffect(() => {
+    if (!socket) return undefined;
+
+    const handleCardRead = (payload) => {
+      if (!payload?.cardUid) return;
+      setUid(payload.cardUid);
+      setError('');
+      setWaiting(false);
+      setData({
+        customer: payload.customer || null,
+        card: {
+          cardUid: payload.cardUid,
+          balance: payload.cardBalance || 0,
+          status: payload.status || 'ACTIVE',
+        },
+        activeSession: payload.activeSession || null,
+        amountDue: payload.amountDue || 0,
+      });
+    };
+
+    socket.on('rfid:card-read', handleCardRead);
+    return () => socket.off('rfid:card-read', handleCardRead);
+  }, [socket]);
+
+  const startTapRead = () => {
     setError('');
-    try {
-      const res = await api.post('/rfid/read-staff', { cardUid: uid });
-      setData(res.data.data);
-    } catch (err) {
-      setError(err.response?.data?.message || 'Read failed');
-    }
+    setData(null);
+    setWaiting(true);
+    setUid('');
   };
 
   return (
     <div className="mx-auto max-w-lg space-y-4">
-      <form onSubmit={read} className="rounded-2xl bg-white p-5 shadow-sm space-y-3">
-        <h3 className="font-semibold">Simulate RFID tap</h3>
-        <input value={uid} onChange={(e) => setUid(e.target.value)} placeholder="Card UID e.g. A4B2C199" className="w-full rounded-xl border px-3 py-2" required />
-        <button className="w-full rounded-xl bg-slate-900 py-2.5 font-semibold text-white">Read card</button>
-      </form>
+      <div className="rounded-2xl bg-white p-5 shadow-sm">
+        <h3 className="font-display text-xl font-bold">RFID card lookup</h3>
+        <p className="mt-1 text-sm text-slate-500">
+          Click below, then tap the customer card. The card ID will appear automatically when the reader sends it.
+        </p>
+      </div>
+
+      <div className="rounded-2xl bg-white p-5 shadow-sm space-y-3">
+        <button
+          type="button"
+          onClick={startTapRead}
+          className="w-full rounded-xl bg-slate-900 py-2.5 font-semibold text-white disabled:opacity-60"
+          disabled={waiting}
+        >
+          {waiting ? 'Waiting for tap…' : 'Read card'}
+        </button>
+      </div>
+
+      {waiting && (
+        <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
+          <div className="font-semibold">Tap your card now</div>
+          <div className="mt-1">Please tap the customer card on the reader. The card ID will appear here automatically.</div>
+          {uid && <div className="mt-2 rounded-xl bg-white px-3 py-2 font-mono text-xs">Current card ID: {uid}</div>}
+        </div>
+      )}
+
       {error && <div className="rounded-xl bg-red-50 px-3 py-2 text-sm text-red-700">{error}</div>}
       {data && (
         <div className="rounded-2xl bg-white p-5 shadow-sm space-y-2 text-sm">
           <div className="font-display text-xl font-bold">CARD DETECTED</div>
           <div className="rounded-xl bg-slate-50 px-3 py-2 font-mono text-xs">Card ID: {data.card?.cardUid || uid}</div>
-          <div>Customer: {data.customer?.full_name}</div>
+          <div>Customer: {data.customer?.full_name || 'Customer record loaded'}</div>
           <div>Card balance: {formatRwf(data.card?.balance)}</div>
           <div>Active session: {data.activeSession?.session_code || 'None'}</div>
           <div>Amount due: {formatRwf(data.amountDue)}</div>

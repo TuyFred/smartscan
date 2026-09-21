@@ -403,16 +403,29 @@ exports.rfidRead = async (req, res) => {
       }
     }
 
+    const responseData = {
+      customer: card.users,
+      card: { id: card.id, cardUid: card.card_uid, balance: money(card.balance), status: card.status },
+      activeSession: session,
+      amountDue,
+      authorizationId: authorization?.id || null,
+    };
+
+    const io = req.app.get('io');
+    const supermarketId = req.user?.supermarketId;
+    if (io && supermarketId) {
+      io.to(`supermarket:${supermarketId}`).emit('rfid:card-read', {
+        ...responseData,
+        cardUid: card.card_uid,
+        customer: card.users,
+        status: card.status,
+      });
+    }
+
     return res.json({
       success: true,
       message: 'RFID card detected. Awaiting customer PIN authorization.',
-      data: {
-        customer: card.users,
-        card: { id: card.id, cardUid: card.card_uid, balance: money(card.balance), status: card.status },
-        activeSession: session,
-        amountDue,
-        authorizationId: authorization?.id || null,
-      },
+      data: responseData,
     });
   } catch (err) {
     console.error(err);
