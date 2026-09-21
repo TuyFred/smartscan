@@ -29,6 +29,7 @@ const managerLinks = [
   { to: '/manager/customers', label: 'Customers', icon: <Users className="h-4 w-4" /> },
   { to: '/manager/payments', label: 'Payments', icon: <CreditCard className="h-4 w-4" /> },
   { to: '/manager/supermarket', label: 'My Supermarket', icon: <Store className="h-4 w-4" /> },
+  { to: '/manager/devices', label: 'Device Status', icon: <Shield className="h-4 w-4" /> },
   { to: '/manager/reports', label: 'Reports', icon: <BarChart3 className="h-4 w-4" /> },
 ];
 

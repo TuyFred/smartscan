@@ -88,6 +88,7 @@ export default function App() {
               <Route path="payments" element={<ManagerPayments />} />
               <Route path="supermarket" element={<ManagerSupermarket />} />
               <Route path="reports" element={<ManagerReports />} />
+              <Route path="devices" element={<AdminDevices />} />
             </Route>
           </Route>
 
