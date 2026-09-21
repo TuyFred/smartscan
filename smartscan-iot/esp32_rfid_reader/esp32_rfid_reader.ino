@@ -140,6 +140,11 @@ unsigned long lastCardTime = 0;
 const unsigned long CARD_COOLDOWN =
   3000;
 
+const unsigned long NO_CARD_TIMEOUT =
+  10000;
+
+unsigned long noCardStartTime = 0;
+unsigned long lastNoCardLog = 0;
 
 // =====================================================
 // PAYMENT STATE
@@ -1338,8 +1343,51 @@ void readRFID() {
     !rfid.PICC_IsNewCardPresent()
   ) {
 
+    if (
+      noCardStartTime == 0
+    ) {
+
+      noCardStartTime = millis();
+    }
+
+
+    if (
+      millis() - noCardStartTime >= NO_CARD_TIMEOUT &&
+      millis() - lastNoCardLog >= NO_CARD_TIMEOUT
+    ) {
+
+      Serial.println();
+      Serial.println(
+        "================================"
+      );
+
+      Serial.println(
+        "NO CARD DETECTED"
+      );
+
+      Serial.println(
+        "Waiting for RFID card for 10 seconds..."
+      );
+
+      Serial.println(
+        "================================"
+      );
+
+      showOLED(
+        "SMARTSCAN",
+        "Waiting for card",
+        "No card detected"
+      );
+
+      lastNoCardLog = millis();
+    }
+
     return;
   }
+
+
+  noCardStartTime = 0;
+  lastNoCardLog = 0;
 
 
   if (

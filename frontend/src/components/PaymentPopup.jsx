@@ -15,21 +15,9 @@ export default function PaymentPopup() {
 
   if (!paymentRequest && !success) return null;
 
-  const cancel = async () => {
-    if (paymentRequest?.authorizationId) {
-      try {
-        await api.post(`/payments/cancel/${paymentRequest.authorizationId}`);
-      } catch {
-        /* ignore */
-      }
-    }
-    setPaymentRequest(null);
-    setPin('');
-    setError('');
-  };
+  const performAuthorize = async () => {
+    if (!paymentRequest?.authorizationId || pin.length < 4 || loading || !canUseCard) return;
 
-  const authorize = async (e) => {
-    e.preventDefault();
     setLoading(true);
     setError('');
     try {
@@ -50,6 +38,34 @@ export default function PaymentPopup() {
       setLoading(false);
     }
   };
+
+  const cancel = async () => {
+    if (paymentRequest?.authorizationId) {
+      try {
+        await api.post(`/payments/cancel/${paymentRequest.authorizationId}`);
+      } catch {
+        /* ignore */
+      }
+    }
+    setPaymentRequest(null);
+    setPin('');
+    setError('');
+  };
+
+  const authorize = async (e) => {
+    if (e) e.preventDefault();
+    await performAuthorize();
+  };
+
+  useEffect(() => {
+    if (paymentRequest && pin.length >= 4 && !loading && !error && !success && canUseCard) {
+      const timer = setTimeout(() => {
+        performAuthorize();
+      }, 300);
+      return () => clearTimeout(timer);
+    }
+    return undefined;
+  }, [paymentRequest, pin, loading, error, success, canUseCard]);
 
   if (success) {
     return (
