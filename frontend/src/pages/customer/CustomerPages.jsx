@@ -126,6 +126,8 @@ function SessionView({ allowScan }) {
   const [session, setSession] = useState(null);
   const [scanner, setScanner] = useState(false);
   const [paymentHelp, setPaymentHelp] = useState(false);
+  const [checkoutStep, setCheckoutStep] = useState('pin');
+  const [pinInput, setPinInput] = useState('');
   const [error, setError] = useState('');
   const navigate = useNavigate();
 
@@ -264,33 +266,83 @@ function SessionView({ allowScan }) {
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-950/70 p-4 backdrop-blur-sm">
           <div className="w-full max-w-md rounded-3xl bg-white p-6 shadow-2xl">
             <div className="mb-4 inline-flex items-center gap-2 rounded-full bg-amber-50 px-3 py-1 text-xs font-semibold text-amber-800">
-              <CreditCard className="h-3.5 w-3.5" /> PAYMENT HELP
+              <CreditCard className="h-3.5 w-3.5" /> CHECKOUT PAYMENT
             </div>
-            <h3 className="font-display text-2xl font-bold text-slate-900">Checkout payment guide</h3>
-            <div className="mt-4 grid grid-cols-3 gap-2 text-center text-[11px] font-semibold uppercase tracking-wide text-slate-500">
-              <div className="rounded-full bg-amber-50 px-2 py-1.5 text-amber-700">1. PIN</div>
-              <div className="rounded-full bg-slate-100 px-2 py-1.5">2. Tap</div>
+
+            <div className="mb-4 grid grid-cols-3 gap-2 text-center text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+              <div className={`rounded-full px-2 py-1.5 ${checkoutStep === 'pin' ? 'bg-amber-50 text-amber-700' : 'bg-slate-100'}`}>
+                1. PIN
+              </div>
+              <div className={`rounded-full px-2 py-1.5 ${checkoutStep === 'tap' ? 'bg-teal-50 text-teal-700' : 'bg-slate-100'}`}>
+                2. Tap
+              </div>
               <div className="rounded-full bg-slate-100 px-2 py-1.5">3. Paid</div>
             </div>
-            <p className="mt-4 text-sm leading-6 text-slate-600">
-              Step 1: enter your payment PIN when prompted. Step 2: tap your RFID card at the checkout counter. Step 3: once the PIN is verified, the amount is removed from the card and the payment succeeds.
-            </p>
-            <div className="mt-5 rounded-2xl bg-slate-50 p-4 text-sm text-slate-700">
-              <div className="font-semibold text-slate-900">Available alternatives</div>
-              <ul className="mt-2 list-disc space-y-1 pl-5">
-                <li>Pay with cash at the checkout.</li>
-                <li>Ask staff to recharge your RFID card.</li>
-                <li>Use another active card if available.</li>
-              </ul>
-            </div>
-            <div className="mt-5 grid grid-cols-2 gap-3">
-              <button type="button" onClick={() => setPaymentHelp(false)} className="rounded-xl border border-slate-200 py-3 font-semibold text-slate-700">
-                Close
-              </button>
-              <button type="button" onClick={() => { setPaymentHelp(false); navigate('/customer/card'); }} className="rounded-xl bg-teal-600 py-3 font-semibold text-white">
-                View card
-              </button>
-            </div>
+
+            {checkoutStep === 'pin' ? (
+              <>
+                <h3 className="font-display text-2xl font-bold text-slate-900">Enter your payment PIN</h3>
+                <p className="mt-3 text-sm leading-6 text-slate-600">
+                  Step 1: enter your pin. Step 2: tap your RFID card. Step 3: payment is confirmed and money is removed from your card.
+                </p>
+
+                <div className="mt-5 rounded-2xl border-2 border-teal-200 bg-teal-50 p-3">
+                  <div className="mb-2 text-xs font-bold uppercase tracking-[0.18em] text-teal-700">Payment PIN</div>
+                  <input
+                    type="password"
+                    inputMode="numeric"
+                    maxLength={6}
+                    value={pinInput}
+                    onChange={(e) => setPinInput(e.target.value.replace(/\D/g, ''))}
+                    className="w-full rounded-xl border-2 border-teal-300 bg-white px-3 py-4 text-center text-2xl font-bold tracking-[0.45em] text-slate-900 outline-none focus:border-teal-500"
+                    placeholder="••••••"
+                    aria-label="Payment PIN"
+                  />
+                </div>
+
+                <div className="mt-5 grid grid-cols-2 gap-3">
+                  <button type="button" onClick={() => { setPaymentHelp(false); setCheckoutStep('pin'); setPinInput(''); }} className="rounded-xl border border-slate-200 py-3 font-semibold text-slate-700">
+                    Close
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (pinInput.length < 4) return;
+                      setCheckoutStep('tap');
+                    }}
+                    disabled={pinInput.length < 4}
+                    className="rounded-xl bg-teal-600 py-3 font-semibold text-white disabled:opacity-50"
+                  >
+                    Continue
+                  </button>
+                </div>
+              </>
+            ) : (
+              <>
+                <h3 className="font-display text-2xl font-bold text-slate-900">Tap your card now</h3>
+                <p className="mt-3 text-sm leading-6 text-slate-600">
+                  Your PIN was accepted. Please tap your RFID card at the checkout counter now. After the card is read and verified, the payment will be completed and the money will be removed from the card.
+                </p>
+
+                <div className="mt-5 rounded-2xl bg-slate-50 p-4 text-sm text-slate-700">
+                  <div className="font-semibold text-slate-900">What happens next</div>
+                  <ul className="mt-2 list-disc space-y-1 pl-5">
+                    <li>Card is checked.</li>
+                    <li>Payment is verified.</li>
+                    <li>Balance is deducted.</li>
+                  </ul>
+                </div>
+
+                <div className="mt-5 grid grid-cols-2 gap-3">
+                  <button type="button" onClick={() => { setCheckoutStep('pin'); setPinInput(''); }} className="rounded-xl border border-slate-200 py-3 font-semibold text-slate-700">
+                    Back
+                  </button>
+                  <button type="button" onClick={() => { setPaymentHelp(false); setCheckoutStep('pin'); setPinInput(''); navigate('/customer/card'); }} className="rounded-xl bg-teal-600 py-3 font-semibold text-white">
+                    View card
+                  </button>
+                </div>
+              </>
+            )}
           </div>
         </div>
       )}
