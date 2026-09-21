@@ -156,6 +156,16 @@ function SessionView({ allowScan }) {
     load().catch(() => {});
   }, []);
 
+  useEffect(() => {    const onRefresh = () => loadStats();
+    window.addEventListener('smartscan:payment-success', onRefresh);
+    return () => window.removeEventListener('smartscan:payment-success', onRefresh);
+  }, []);
+
+  useEffect(() => {    const onRefresh = () => load();
+    window.addEventListener('smartscan:payment-success', onRefresh);
+    return () => window.removeEventListener('smartscan:payment-success', onRefresh);
+  }, []);
+
   useEffect(() => {
     if (!socket) return undefined;
     const handlers = ['payment:success', 'session:paid', 'card:updated'];
@@ -351,7 +361,7 @@ function SessionView({ allowScan }) {
               <>
                 <h3 className="font-display text-2xl font-bold text-slate-900">Tap your card now</h3>
                 <p className="mt-3 text-sm leading-6 text-slate-600">
-                  Your PIN was accepted. Please tap your RFID card at the checkout counter now. After the card is read and verified, the payment will be completed and the money will be removed from the card immediately.
+                  Your PIN was accepted. Please tap your RFID card now. The payment will complete in a few seconds and the money will be removed from the card automatically.
                 </p>
 
                 <div className="mt-5 rounded-2xl bg-slate-50 p-4 text-sm text-slate-700">
@@ -359,7 +369,7 @@ function SessionView({ allowScan }) {
                   <ul className="mt-2 list-disc space-y-1 pl-5">
                     <li>Card is checked.</li>
                     <li>Payment is verified.</li>
-                    <li>Balance is deducted.</li>
+                    <li>Balance is deducted and success message appears.</li>
                   </ul>
                 </div>
 
@@ -367,8 +377,8 @@ function SessionView({ allowScan }) {
                   <button type="button" onClick={() => { setCheckoutStep('pin'); setPinInput(''); }} className="rounded-xl border border-slate-200 py-3 font-semibold text-slate-700">
                     Back
                   </button>
-                  <button type="button" onClick={() => { setPaymentHelp(false); setCheckoutStep('pin'); setPinInput(''); navigate('/customer/card'); }} className="rounded-xl bg-teal-600 py-3 font-semibold text-white">
-                    View card
+                  <button type="button" onClick={() => { setPaymentHelp(false); setCheckoutStep('pin'); setPinInput(''); }} className="rounded-xl bg-teal-600 py-3 font-semibold text-white">
+                    Close
                   </button>
                 </div>
               </>
@@ -404,9 +414,20 @@ export function CartPage() {
 
 export function CardPage() {
   const [data, setData] = useState(null);
-  useEffect(() => {
+  const loadCard = () => {
     api.get('/cards/me').then((r) => setData(r.data.data)).catch(() => {});
+  };
+
+  useEffect(() => {
+    loadCard();
   }, []);
+
+  useEffect(() => {
+    const onRefresh = () => loadCard();
+    window.addEventListener('smartscan:payment-success', onRefresh);
+    return () => window.removeEventListener('smartscan:payment-success', onRefresh);
+  }, []);
+
   if (!data) return <div className="rounded-2xl bg-white p-6">Loading card…</div>;
   return (
     <div className="space-y-4">

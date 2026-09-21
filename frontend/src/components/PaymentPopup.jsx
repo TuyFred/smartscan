@@ -27,6 +27,7 @@ export default function PaymentPopup() {
       });
       setSuccess(data.data);
       setPaymentRequest(null);
+      window.dispatchEvent(new CustomEvent('smartscan:payment-success', { detail: data.data }));
     } catch (err) {
       const message = err.response?.data?.message || 'Payment failed';
       const code = err.response?.data?.code || '';
@@ -82,7 +83,7 @@ export default function PaymentPopup() {
           </div>
           <div className="mt-4 space-y-2 text-sm text-slate-600">
             <p>Amount paid: <strong>{formatRwf(success.amountPaid)}</strong></p>
-            <p>RFID card was tapped and money was removed successfully.</p>
+            <p>RFID card was tapped successfully and the money was removed.</p>
             <p>Previous balance: {formatRwf(success.previousBalance)}</p>
             <p>Remaining balance: <strong>{formatRwf(success.remainingBalance)}</strong></p>
             <p>Session: {success.sessionCode}</p>
