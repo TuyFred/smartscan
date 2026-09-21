@@ -412,14 +412,20 @@ exports.rfidRead = async (req, res) => {
     };
 
     const io = req.app.get('io');
-    const supermarketId = req.user?.supermarketId;
-    if (io && supermarketId) {
-      io.to(`supermarket:${supermarketId}`).emit('rfid:card-read', {
+    const supermarketId = req.user?.supermarketId || req.device?.supermarket_id;
+    if (io) {
+      const payload = {
         ...responseData,
         cardUid: card.card_uid,
         customer: card.users,
         status: card.status,
-      });
+      };
+
+      if (supermarketId) {
+        io.to(`supermarket:${supermarketId}`).emit('rfid:card-read', payload);
+      } else {
+        io.emit('rfid:card-read', payload);
+      }
     }
 
     return res.json({
