@@ -99,6 +99,53 @@ exports.createStaff = async (req, res) => {
   }
 };
 
+exports.updateUser = async (req, res) => {
+  try {
+    const { fullName, email, phone, role, supermarketId, branchId, accountStatus, isActive } = req.body;
+    const payload = {};
+
+    if (fullName) payload.full_name = fullName;
+    if (email) payload.email = String(email).toLowerCase();
+    if (phone !== undefined) payload.phone = phone || null;
+    if (role) {
+      const { data: roleRow } = await supabase.from('roles').select('id').eq('name', role).single();
+      if (roleRow) payload.role_id = roleRow.id;
+    }
+    if (supermarketId !== undefined) payload.supermarket_id = supermarketId || null;
+    if (branchId !== undefined) payload.branch_id = branchId || null;
+    if (accountStatus) payload.account_status = accountStatus;
+    if (isActive !== undefined) payload.is_active = Boolean(isActive);
+
+    const { data, error } = await supabase
+      .from('users')
+      .update(payload)
+      .eq('id', req.params.id)
+      .select('id, full_name, email, phone, account_status, is_active, supermarket_id, branch_id, roles(name)')
+      .single();
+
+    if (error) throw error;
+    return res.json({ success: true, data: { ...data, role: data.roles?.name } });
+  } catch (err) {
+    return res.status(500).json({ success: false, message: err.message });
+  }
+};
+
+exports.deleteUser = async (req, res) => {
+  try {
+    const { data, error } = await supabase
+      .from('users')
+      .update({ is_active: false, account_status: 'REJECTED' })
+      .eq('id', req.params.id)
+      .select('id, full_name, email')
+      .single();
+
+    if (error) throw error;
+    return res.json({ success: true, message: 'User deactivated', data });
+  } catch (err) {
+    return res.status(500).json({ success: false, message: err.message });
+  }
+};
+
 exports.dashboardStats = async (req, res) => {
   try {
     const role = req.user.role;

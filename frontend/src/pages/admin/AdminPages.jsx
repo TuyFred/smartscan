@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { jsPDF } from 'jspdf';
 import {
   LayoutDashboard,
   Users,
@@ -42,6 +43,26 @@ export function AdminDashboard() {
     api.get('/admin/stats').then((r) => setStats(r.data.data)).catch(() => {});
   };
 
+  const exportPdfReport = () => {
+    const doc = new jsPDF();
+    doc.setFontSize(18);
+    doc.text('SMARTSCAN Admin Report', 14, 18);
+    doc.setFontSize(11);
+    const rows = [
+      ['Users', String(stats?.users ?? 0)],
+      ['Pending approvals', String(stats?.pendingApprovals ?? 0)],
+      ['Pending PIN approvals', String(stats?.pendingPinApprovals ?? 0)],
+      ['Supermarkets', String(stats?.supermarkets ?? 0)],
+      ['Products', String(stats?.products ?? 0)],
+      ['Sessions', String(stats?.shopping_sessions ?? 0)],
+      ['Payments', String(stats?.payments ?? 0)],
+    ];
+    rows.forEach(([label, value], index) => {
+      doc.text(`${label}: ${value}`, 14, 38 + index * 8);
+    });
+    doc.save('smartscan-admin-report.pdf');
+  };
+
   useEffect(() => {
     loadStats();
   }, []);
@@ -66,13 +87,20 @@ export function AdminDashboard() {
     ['Payments', stats?.payments],
   ];
   return (
-    <div className="grid gap-4 md:grid-cols-3">
-      {cards.map(([label, value]) => (
-        <div key={label} className="rounded-2xl bg-white p-5 shadow-sm">
-          <div className="text-xs uppercase text-slate-400">{label}</div>
-          <div className="mt-1 font-display text-3xl font-bold">{value ?? '—'}</div>
-        </div>
-      ))}
+    <div className="space-y-4">
+      <div className="flex justify-end">
+        <button type="button" onClick={exportPdfReport} className="rounded-xl bg-slate-900 px-4 py-2 font-semibold text-white">
+          Export PDF report
+        </button>
+      </div>
+      <div className="grid gap-4 md:grid-cols-3">
+        {cards.map(([label, value]) => (
+          <div key={label} className="rounded-2xl bg-white p-5 shadow-sm">
+            <div className="text-xs uppercase text-slate-400">{label}</div>
+            <div className="mt-1 font-display text-3xl font-bold">{value ?? '—'}</div>
+          </div>
+        ))}
+      </div>
     </div>
   );
 }
@@ -80,6 +108,7 @@ export function AdminDashboard() {
 export function AdminUsers() {
   const [rows, setRows] = useState([]);
   const [open, setOpen] = useState(false);
+  const [editingUser, setEditingUser] = useState(null);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState('');
   const [form, setForm] = useState({
@@ -105,7 +134,35 @@ export function AdminUsers() {
     setForm((prev) => ({ ...prev, [name]: value }));
   };
 
-  const createUser = async (e) => {
+  const openCreate = () => {
+    setEditingUser(null);
+    setForm({
+      fullName: '',
+      email: '',
+      phone: '',
+      password: 'Password123!',
+      role: 'CASHIER',
+      supermarketId: '',
+      branchId: '',
+    });
+    setOpen(true);
+  };
+
+  const openEdit = (user) => {
+    setEditingUser(user);
+    setForm({
+      fullName: user.full_name || '',
+      email: user.email || '',
+      phone: user.phone || '',
+      password: '',
+      role: user.role || 'CASHIER',
+      supermarketId: user.supermarket_id || '',
+      branchId: user.branch_id || '',
+    });
+    setOpen(true);
+  };
+
+  const saveUser = async (e) => {
     e.preventDefault();
     setSaving(true);
     setMessage('');
@@ -114,12 +171,21 @@ export function AdminUsers() {
         fullName: form.fullName,
         email: form.email,
         phone: form.phone,
-        password: form.password,
         role: form.role,
         supermarketId: form.supermarketId || undefined,
         branchId: form.branchId || undefined,
       };
-      await api.post('/admin/staff', payload);
+      if (!editingUser && form.password) payload.password = form.password;
+      if (editingUser) {
+        await api.patch(`/admin/users/${editingUser.id}`, payload);
+        setMessage('User updated successfully');
+      } else {
+        await api.post('/admin/staff', {
+          ...payload,
+          password: form.password,
+        });
+        setMessage('User created successfully');
+      }
       setOpen(false);
       setForm({
         fullName: '',
@@ -130,25 +196,37 @@ export function AdminUsers() {
         supermarketId: '',
         branchId: '',
       });
-      setMessage('User created successfully');
       load();
     } catch (err) {
-      setMessage(err.response?.data?.message || 'Unable to create user');
+      setMessage(err.response?.data?.message || 'Unable to save user');
     } finally {
       setSaving(false);
     }
   };
+
+  const deleteUser = async (id) => {
+    if (!window.confirm('Delete this user?')) return;
+    try {
+      await api.delete(`/admin/users/${id}`);
+      setMessage('User deactivated successfully');
+      load();
+    } catch (err) {
+      setMessage(err.response?.data?.message || 'Unable to delete user');
+    }
+  };
+
+  const createUser = async (e) => saveUser(e);
 
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between rounded-2xl bg-white p-4 shadow-sm">
         <div>
           <h2 className="font-display text-xl font-bold">User management</h2>
-          <p className="text-sm text-slate-500">Create staff users and approve customer accounts.</p>
+          <p className="text-sm text-slate-500">Create, edit, delete, and approve user accounts.</p>
         </div>
         <button
           type="button"
-          onClick={() => setOpen(true)}
+          onClick={openCreate}
           className="rounded-xl bg-slate-900 px-4 py-2 font-semibold text-white"
         >
           + Add user
@@ -181,8 +259,10 @@ export function AdminUsers() {
                 <td className="px-4 py-3 text-center">{u.email_verified ? 'Yes' : 'No'}</td>
                 <td className="px-4 py-3 text-center">{u.account_status}</td>
                 <td className="px-4 py-3 text-center space-x-2">
-                  <button type="button" className="text-teal-700" onClick={() => setStatus(u.id, 'APPROVED')}>Approve</button>
+                  <button type="button" className="text-teal-700" onClick={() => openEdit(u)}>Edit</button>
+                  <button type="button" className="text-amber-700" onClick={() => setStatus(u.id, 'APPROVED')}>Approve</button>
                   <button type="button" className="text-amber-700" onClick={() => setStatus(u.id, 'SUSPENDED')}>Suspend</button>
+                  <button type="button" className="text-red-600" onClick={() => deleteUser(u.id)}>Delete</button>
                   <button type="button" className="text-red-600" onClick={() => setStatus(u.id, 'REJECTED')}>Reject</button>
                 </td>
               </tr>
@@ -195,7 +275,7 @@ export function AdminUsers() {
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/60 p-4">
           <div className="w-full max-w-lg rounded-3xl bg-white p-6 shadow-2xl">
             <div className="mb-4 flex items-center justify-between">
-              <h3 className="font-display text-2xl font-bold">Add new user</h3>
+              <h3 className="font-display text-2xl font-bold">{editingUser ? 'Edit user' : 'Add new user'}</h3>
               <button type="button" onClick={() => setOpen(false)} className="text-sm text-slate-500">Close</button>
             </div>
 
@@ -225,7 +305,20 @@ export function AdminUsers() {
                     placeholder="user@example.com"
                   />
                 </label>
-
+                {!editingUser && (
+                  <label className="block text-sm font-medium md:col-span-2">
+                    Password
+                    <input
+                      required
+                      type="text"
+                      name="password"
+                      value={form.password}
+                      onChange={handleChange}
+                      className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2.5"
+                      placeholder="Password123!"
+                    />
+                  </label>
+                )}
                 <label className="block text-sm font-medium">
                   Phone
                   <input
@@ -249,18 +342,6 @@ export function AdminUsers() {
                     <option value="MANAGER">Manager</option>
                     <option value="ADMIN">Admin</option>
                   </select>
-                </label>
-
-                <label className="block text-sm font-medium md:col-span-2">
-                  Password
-                  <input
-                    required
-                    type="text"
-                    name="password"
-                    value={form.password}
-                    onChange={handleChange}
-                    className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2.5"
-                  />
                 </label>
 
                 <label className="block text-sm font-medium">
@@ -291,7 +372,7 @@ export function AdminUsers() {
                   Cancel
                 </button>
                 <button type="submit" disabled={saving} className="rounded-xl bg-slate-900 px-4 py-2 font-semibold text-white disabled:opacity-60">
-                  {saving ? 'Creating...' : 'Create user'}
+                  {saving ? 'Saving...' : editingUser ? 'Update user' : 'Create user'}
                 </button>
               </div>
             </form>

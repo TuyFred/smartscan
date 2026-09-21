@@ -1001,10 +1001,12 @@ export function CashierRfid() {
       {data && (
         <div className="rounded-2xl bg-white p-5 shadow-sm space-y-2 text-sm">
           <div className="font-display text-xl font-bold">CARD DETECTED</div>
+          <div className="rounded-xl bg-slate-50 px-3 py-2 font-mono text-xs">Card ID: {data.card?.cardUid || uid}</div>
           <div>Customer: {data.customer?.full_name}</div>
           <div>Card balance: {formatRwf(data.card?.balance)}</div>
           <div>Active session: {data.activeSession?.session_code || 'None'}</div>
           <div>Amount due: {formatRwf(data.amountDue)}</div>
+          <div>Status: {data.card?.status || 'ACTIVE'}</div>
           <p className="pt-2 text-xs text-amber-700">Deduction only happens after customer PIN authorization.</p>
         </div>
       )}
