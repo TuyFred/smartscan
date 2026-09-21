@@ -300,6 +300,10 @@ function SessionView({ allowScan }) {
                   />
                 </div>
 
+                <div className="mt-3 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900">
+                  After PIN is accepted, tap your RFID card to confirm payment and complete the deduction.
+                </div>
+
                 <div className="mt-5 grid grid-cols-2 gap-3">
                   <button type="button" onClick={() => { setPaymentHelp(false); setCheckoutStep('pin'); setPinInput(''); }} className="rounded-xl border border-slate-200 py-3 font-semibold text-slate-700">
                     Close
@@ -321,7 +325,7 @@ function SessionView({ allowScan }) {
               <>
                 <h3 className="font-display text-2xl font-bold text-slate-900">Tap your card now</h3>
                 <p className="mt-3 text-sm leading-6 text-slate-600">
-                  Your PIN was accepted. Please tap your RFID card at the checkout counter now. After the card is read and verified, the payment will be completed and the money will be removed from the card.
+                  Your PIN was accepted. Please tap your RFID card at the checkout counter now. After the card is read and verified, the payment will be completed and the money will be removed from the card immediately.
                 </p>
 
                 <div className="mt-5 rounded-2xl bg-slate-50 p-4 text-sm text-slate-700">
