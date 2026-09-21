@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { AlertTriangle, CreditCard, Loader2, ShieldCheck } from 'lucide-react';
 import api, { formatRwf } from '../lib/api';
 import { useAuth } from '../lib/auth';
