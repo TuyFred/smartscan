@@ -39,6 +39,7 @@ adminRouter.get('/stats', requireAuth, adminCtrl.dashboardStats);
 adminRouter.get('/users', requireAuth, requireRole('ADMIN', 'MANAGER'), adminCtrl.listUsers);
 adminRouter.patch('/users/:id/status', requireAuth, requireRole('ADMIN'), adminCtrl.approveUser);
 adminRouter.post('/staff', requireAuth, requireRole('ADMIN', 'MANAGER'), adminCtrl.createStaff);
+adminRouter.get('/devices', requireAuth, requireRole('ADMIN'), adminCtrl.listDevices);
 adminRouter.post('/devices', requireAuth, requireRole('ADMIN'), adminCtrl.registerDevice);
 adminRouter.get('/audit-logs', requireAuth, requireRole('ADMIN'), adminCtrl.auditLogs);
 adminRouter.get('/pin-requests', requireAuth, requireRole('ADMIN'), adminCtrl.listPinRequests);

@@ -175,6 +175,26 @@ exports.dashboardStats = async (req, res) => {
   }
 };
 
+exports.listDevices = async (_req, res) => {
+  try {
+    const { data, error } = await supabase
+      .from('iot_devices')
+      .select('*')
+      .order('last_seen_at', { ascending: false, nullsFirst: false })
+      .limit(50);
+    if (error) throw error;
+    const now = Date.now();
+    const rows = (data || []).map((device) => {
+      const seenAt = device.last_seen_at ? new Date(device.last_seen_at).getTime() : null;
+      const connected = Boolean(seenAt && now - seenAt < 5 * 60 * 1000 && device.status === 'ACTIVE');
+      return { ...device, connected };
+    });
+    return res.json({ success: true, data: rows });
+  } catch (err) {
+    return res.status(500).json({ success: false, message: err.message });
+  }
+};
+
 exports.registerDevice = async (req, res) => {
   try {
     const { name, type, supermarketId, branchId } = req.body;

@@ -460,13 +460,40 @@ export function AdminReceipts() {
 export function AdminDevices() {
   const [form, setForm] = useState({ name: '', type: 'EXIT_SCANNER' });
   const [created, setCreated] = useState(null);
+  const [devices, setDevices] = useState([]);
+  const [systemStatus, setSystemStatus] = useState('checking');
+
+  const load = async () => {
+    const [deviceRes, healthRes] = await Promise.all([
+      api.get('/admin/devices'),
+      api.get('/health'),
+    ]);
+    setDevices(deviceRes.data.data || []);
+    setSystemStatus(healthRes?.data?.success ? 'online' : 'offline');
+  };
+
+  useEffect(() => {
+    load().catch(() => setSystemStatus('offline'));
+  }, []);
+
   const submit = async (e) => {
     e.preventDefault();
     const { data } = await api.post('/admin/devices', form);
     setCreated(data.data);
+    await load();
   };
+
   return (
     <div className="space-y-4">
+      <div className="rounded-2xl bg-white p-5 shadow-sm">
+        <div className="flex items-center justify-between gap-3">
+          <h3 className="font-semibold">Device health</h3>
+          <span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${systemStatus === 'online' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
+            {systemStatus === 'online' ? 'System online' : systemStatus === 'checking' ? 'Checking...' : 'Offline'}
+          </span>
+        </div>
+      </div>
+
       <form onSubmit={submit} className="rounded-2xl bg-white p-5 shadow-sm space-y-3 max-w-lg">
         <h3 className="font-semibold">Register IoT device</h3>
         <input className="w-full rounded-xl border px-3 py-2" placeholder="Name" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
@@ -476,11 +503,36 @@ export function AdminDevices() {
         </select>
         <button className="rounded-xl bg-teal-600 px-4 py-2 font-semibold text-white">Create</button>
       </form>
+
       {created && (
         <div className="rounded-2xl bg-amber-50 p-4 text-sm">
           Device {created.device_code} · API key: <code>{created.api_key}</code>
         </div>
       )}
+
+      <div className="rounded-2xl bg-white p-5 shadow-sm">
+        <h3 className="font-semibold">Registered devices</h3>
+        <div className="mt-3 space-y-3">
+          {devices.map((device) => (
+            <div key={device.id} className="rounded-xl border border-slate-200 p-3">
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <div className="font-medium">{device.name}</div>
+                  <div className="text-xs text-slate-500">{device.device_code} · {device.type}</div>
+                </div>
+                <span className={device.connected ? 'rounded-full bg-green-100 px-2 py-1 text-xs font-semibold text-green-700' : 'rounded-full bg-red-100 px-2 py-1 text-xs font-semibold text-red-700'}>
+                  {device.connected ? 'Connected' : 'Not connected'}
+                </span>
+              </div>
+              <div className="mt-2 text-xs text-slate-500">
+                Last seen: {device.last_seen_at ? new Date(device.last_seen_at).toLocaleString() : 'Never'}
+              </div>
+              <div className="mt-1 text-xs text-slate-500">API key: <code>{device.api_key}</code></div>
+            </div>
+          ))}
+          {!devices.length && <p className="text-sm text-slate-500">No devices registered yet.</p>}
+        </div>
+      </div>
     </div>
   );
 }
