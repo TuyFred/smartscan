@@ -132,8 +132,8 @@ export default function PaymentPopup() {
         {error && <div className="mt-3 rounded-xl bg-red-50 px-3 py-2 text-sm text-red-700">{error}</div>}
 
         <form onSubmit={authorize} className="mt-4 space-y-3">
-          <label className="block text-sm font-medium">
-            Enter payment PIN
+          <div className="rounded-2xl border-2 border-teal-200 bg-teal-50 p-3">
+            <div className="mb-2 text-xs font-bold uppercase tracking-[0.18em] text-teal-700">Payment PIN</div>
             <input
               type="password"
               inputMode="numeric"
@@ -141,12 +141,14 @@ export default function PaymentPopup() {
               required
               value={pin}
               onChange={(e) => setPin(e.target.value.replace(/\D/g, ''))}
-              className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-3 text-center text-xl tracking-[0.5em] outline-none focus:border-teal-500"
-              placeholder="••••"
+              className="w-full rounded-xl border-2 border-teal-300 bg-white px-3 py-4 text-center text-2xl font-bold tracking-[0.45em] text-slate-900 outline-none focus:border-teal-500"
+              placeholder="••••••"
+              aria-label="Payment PIN"
             />
-          </label>
+            <div className="mt-2 text-center text-[11px] font-medium text-teal-800">Type your 4–6 digit PIN here</div>
+          </div>
           <div className="rounded-xl border border-teal-100 bg-teal-50 px-3 py-2 text-xs text-teal-800">
-            After the PIN is verified, the system will tap the card and remove the amount from the balance.
+            Step 2: after PIN is verified, the system will confirm the card tap and remove the amount.
           </div>
           <div className="grid grid-cols-2 gap-3">
             <button type="button" onClick={cancel} className="rounded-xl border border-slate-200 py-3 font-semibold">
