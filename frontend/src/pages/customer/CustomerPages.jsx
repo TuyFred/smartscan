@@ -125,6 +125,7 @@ function SessionView({ allowScan }) {
   const { triggerPaymentRequest, user } = useAuth();
   const [session, setSession] = useState(null);
   const [scanner, setScanner] = useState(false);
+  const [paymentHelp, setPaymentHelp] = useState(false);
   const [error, setError] = useState('');
   const navigate = useNavigate();
 
@@ -252,13 +253,42 @@ function SessionView({ allowScan }) {
               });
               return;
             }
-            alert('Go to checkout area and tap your RFID card. Then authorize with PIN on this screen.');
+            setPaymentHelp(true);
           }}
           className="rounded-xl bg-slate-900 px-4 py-2.5 font-semibold text-white"
         >
           Checkout (tap RFID)
         </button>
       </div>
+      {paymentHelp && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-950/70 p-4 backdrop-blur-sm">
+          <div className="w-full max-w-md rounded-3xl bg-white p-6 shadow-2xl">
+            <div className="mb-4 inline-flex items-center gap-2 rounded-full bg-amber-50 px-3 py-1 text-xs font-semibold text-amber-800">
+              <CreditCard className="h-3.5 w-3.5" /> PAYMENT HELP
+            </div>
+            <h3 className="font-display text-2xl font-bold text-slate-900">Tap your RFID card at checkout</h3>
+            <p className="mt-3 text-sm leading-6 text-slate-600">
+              Please tap your RFID card at the checkout counter. After the card is detected, you will be asked for your payment PIN to confirm the charge. If the card balance is not enough, you can pay with cash or ask a cashier to top up the card.
+            </p>
+            <div className="mt-5 rounded-2xl bg-slate-50 p-4 text-sm text-slate-700">
+              <div className="font-semibold text-slate-900">Available alternatives</div>
+              <ul className="mt-2 list-disc space-y-1 pl-5">
+                <li>Pay with cash at the checkout.</li>
+                <li>Ask staff to recharge your RFID card.</li>
+                <li>Use another active card if available.</li>
+              </ul>
+            </div>
+            <div className="mt-5 grid grid-cols-2 gap-3">
+              <button type="button" onClick={() => setPaymentHelp(false)} className="rounded-xl border border-slate-200 py-3 font-semibold text-slate-700">
+                Close
+              </button>
+              <button type="button" onClick={() => { setPaymentHelp(false); navigate('/customer/card'); }} className="rounded-xl bg-teal-600 py-3 font-semibold text-white">
+                View card
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
       {scanner && <QrScanner title="Scan product QR" onScan={onScanProduct} onClose={() => setScanner(false)} />}
     </div>
   );

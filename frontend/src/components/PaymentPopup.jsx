@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { CreditCard, Loader2, ShieldCheck } from 'lucide-react';
+import { AlertTriangle, CreditCard, Loader2, ShieldCheck } from 'lucide-react';
 import api, { formatRwf } from '../lib/api';
 import { useAuth } from '../lib/auth';
 
@@ -9,6 +9,9 @@ export default function PaymentPopup() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState(null);
+
+  const shortfall = Math.max(0, Number(paymentRequest?.amountToPay || 0) - Number(paymentRequest?.cardBalance || 0));
+  const canUseCard = shortfall === 0;
 
   if (!paymentRequest && !success) return null;
 
@@ -37,7 +40,12 @@ export default function PaymentPopup() {
       setSuccess(data.data);
       setPaymentRequest(null);
     } catch (err) {
-      setError(err.response?.data?.message || 'Payment failed');
+      const message = err.response?.data?.message || 'Payment failed';
+      const code = err.response?.data?.code || '';
+      setError(message);
+      if (code === 'INSUFFICIENT_BALANCE') {
+        setPin('');
+      }
     } finally {
       setLoading(false);
     }
@@ -90,6 +98,26 @@ export default function PaymentPopup() {
           <div className="flex justify-between"><span>Card balance</span><strong>{formatRwf(paymentRequest.cardBalance)}</strong></div>
         </div>
 
+        {!canUseCard && (
+          <div className="mt-4 rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
+            <div className="flex items-start gap-3">
+              <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0" />
+              <div>
+                <div className="font-semibold">Card balance is not enough</div>
+                <div className="mt-1">Available: {formatRwf(paymentRequest.cardBalance)} · Needed: {formatRwf(shortfall)}</div>
+              </div>
+            </div>
+            <div className="mt-3 grid grid-cols-2 gap-2">
+              <button type="button" onClick={() => { setPaymentRequest(null); setPin(''); setError(''); }} className="rounded-xl border border-amber-200 bg-white py-2.5 font-semibold text-amber-900">
+                Cash / cashier
+              </button>
+              <button type="button" onClick={() => setPin('')} className="rounded-xl bg-amber-500 py-2.5 font-semibold text-white">
+                Try another card
+              </button>
+            </div>
+          </div>
+        )}
+
         {error && <div className="mt-3 rounded-xl bg-red-50 px-3 py-2 text-sm text-red-700">{error}</div>}
 
         <form onSubmit={authorize} className="mt-4 space-y-3">
@@ -112,7 +140,7 @@ export default function PaymentPopup() {
             </button>
             <button
               type="submit"
-              disabled={loading || pin.length < 4}
+              disabled={loading || pin.length < 4 || !canUseCard}
               className="flex items-center justify-center gap-2 rounded-xl bg-teal-600 py-3 font-semibold text-white disabled:opacity-60"
             >
               {loading && <Loader2 className="h-4 w-4 animate-spin" />}
