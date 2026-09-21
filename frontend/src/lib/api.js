@@ -16,7 +16,7 @@ api.interceptors.response.use(
   (res) => res,
   (err) => {
     if (err.response?.status === 401 && !err.config?.url?.includes('/auth/login')) {
-      // keep silent for optional endpoints
+      localStorage.removeItem('smartscan_token');
     }
     return Promise.reject(err);
   }

@@ -13,6 +13,7 @@ function parseFrom(from) {
 
 const emailFrom = process.env.EMAIL_FROM || 'SMARTSCAN <noreply@smartscan.local>';
 const parsedFrom = parseFrom(emailFrom);
+const DEFAULT_JWT_SECRET = 'smartscan_jwt_secret_change_in_production_2026';
 
 const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:5173';
 const extraOrigins = (process.env.CORS_ORIGINS || '')
@@ -37,7 +38,7 @@ module.exports = {
   frontendUrl,
   allowedOrigins: [...new Set([frontendUrl, ...extraOrigins, ...localhostOrigins])],
   isLocalhostOrigin,
-  jwtSecret: process.env.JWT_SECRET || 'smartscan_dev_secret',
+  jwtSecret: process.env.JWT_SECRET || DEFAULT_JWT_SECRET,
   jwtExpiresIn: process.env.JWT_EXPIRES_IN || '7d',
   otpExpiresMinutes: Number(process.env.OTP_EXPIRES_MINUTES || 10),
   otpRateLimitMinutes: Number(process.env.OTP_RATE_LIMIT_MINUTES || 1),
