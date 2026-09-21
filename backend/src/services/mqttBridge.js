@@ -4,7 +4,10 @@ const config = require('../config/env');
 
 const MQTT_BROKER = process.env.MQTT_BROKER_URL || 'mqtt://broker.emqx.io';
 const MQTT_TOPIC = process.env.MQTT_TOPIC || 'smartscan/rfid/card';
-const API_URL = process.env.SMARTSCAN_API_URL || 'http://localhost:5000';
+const API_URL =
+  process.env.SMARTSCAN_API_URL ||
+  process.env.RENDER_EXTERNAL_URL ||
+  (process.env.NODE_ENV === 'production' ? 'https://smartscan-p8j6.onrender.com' : 'http://localhost:5000');
 const DEVICE_KEY = process.env.IOT_API_KEY || config.iotApiKey || 'smartscan-iot-device-key-2026';
 
 const client = mqtt.connect(MQTT_BROKER, {
