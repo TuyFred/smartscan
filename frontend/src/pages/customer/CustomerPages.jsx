@@ -266,9 +266,14 @@ function SessionView({ allowScan }) {
             <div className="mb-4 inline-flex items-center gap-2 rounded-full bg-amber-50 px-3 py-1 text-xs font-semibold text-amber-800">
               <CreditCard className="h-3.5 w-3.5" /> PAYMENT HELP
             </div>
-            <h3 className="font-display text-2xl font-bold text-slate-900">Tap your RFID card at checkout</h3>
-            <p className="mt-3 text-sm leading-6 text-slate-600">
-              Please tap your RFID card at the checkout counter. After the card is detected, you will be asked for your payment PIN to confirm the charge. If the card balance is not enough, you can pay with cash or ask a cashier to top up the card.
+            <h3 className="font-display text-2xl font-bold text-slate-900">Checkout payment guide</h3>
+            <div className="mt-4 grid grid-cols-3 gap-2 text-center text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+              <div className="rounded-full bg-amber-50 px-2 py-1.5 text-amber-700">1. PIN</div>
+              <div className="rounded-full bg-slate-100 px-2 py-1.5">2. Tap</div>
+              <div className="rounded-full bg-slate-100 px-2 py-1.5">3. Paid</div>
+            </div>
+            <p className="mt-4 text-sm leading-6 text-slate-600">
+              Step 1: enter your payment PIN when prompted. Step 2: tap your RFID card at the checkout counter. Step 3: once the PIN is verified, the amount is removed from the card and the payment succeeds.
             </p>
             <div className="mt-5 rounded-2xl bg-slate-50 p-4 text-sm text-slate-700">
               <div className="font-semibold text-slate-900">Available alternatives</div>

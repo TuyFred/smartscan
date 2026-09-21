@@ -59,8 +59,14 @@ export default function PaymentPopup() {
             <ShieldCheck className="h-7 w-7" />
           </div>
           <h3 className="font-display text-2xl font-bold text-slate-900">Payment successful</h3>
+          <div className="mt-3 grid grid-cols-3 gap-2 text-center text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+            <div className="rounded-full bg-teal-50 px-2 py-1.5 text-teal-700">1. PIN</div>
+            <div className="rounded-full bg-teal-50 px-2 py-1.5 text-teal-700">2. Card</div>
+            <div className="rounded-full bg-green-100 px-2 py-1.5 text-green-700">3. Paid</div>
+          </div>
           <div className="mt-4 space-y-2 text-sm text-slate-600">
             <p>Amount paid: <strong>{formatRwf(success.amountPaid)}</strong></p>
+            <p>RFID card was tapped and money was removed successfully.</p>
             <p>Previous balance: {formatRwf(success.previousBalance)}</p>
             <p>Remaining balance: <strong>{formatRwf(success.remainingBalance)}</strong></p>
             <p>Session: {success.sessionCode}</p>
@@ -88,8 +94,13 @@ export default function PaymentPopup() {
         <div className="mb-3 inline-flex items-center gap-2 rounded-full bg-amber-50 px-3 py-1 text-xs font-semibold text-amber-800">
           <CreditCard className="h-3.5 w-3.5" /> RFID CARD DETECTED
         </div>
+        <div className="mb-4 grid grid-cols-3 gap-2 text-center text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+          <div className="rounded-full bg-amber-50 px-2 py-1.5 text-amber-700">1. PIN</div>
+          <div className="rounded-full bg-slate-100 px-2 py-1.5">2. Tap</div>
+          <div className="rounded-full bg-slate-100 px-2 py-1.5">3. Paid</div>
+        </div>
         <h3 className="font-display text-2xl font-bold">Authorize payment</h3>
-        <p className="mt-1 text-sm text-slate-500">Money is not deducted until your PIN is verified.</p>
+        <p className="mt-1 text-sm text-slate-500">Step 1: Enter your payment PIN to authorize the card payment.</p>
 
         <div className="mt-4 space-y-2 rounded-2xl bg-slate-50 p-4 text-sm">
           <div className="flex justify-between"><span>Customer</span><strong>{paymentRequest.customer?.full_name}</strong></div>
@@ -134,6 +145,9 @@ export default function PaymentPopup() {
               placeholder="••••"
             />
           </label>
+          <div className="rounded-xl border border-teal-100 bg-teal-50 px-3 py-2 text-xs text-teal-800">
+            After the PIN is verified, the system will tap the card and remove the amount from the balance.
+          </div>
           <div className="grid grid-cols-2 gap-3">
             <button type="button" onClick={cancel} className="rounded-xl border border-slate-200 py-3 font-semibold">
               Cancel
