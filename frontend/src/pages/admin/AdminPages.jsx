@@ -13,6 +13,7 @@ import {
 } from 'lucide-react';
 import DashboardLayout from '../../components/DashboardLayout';
 import api, { formatRwf } from '../../lib/api';
+import { useAuth } from '../../lib/auth';
 import { ManagerProducts, ManagerSupermarket } from '../staff/StaffPages';
 
 const links = [
@@ -35,9 +36,26 @@ export function AdminShell() {
 
 export function AdminDashboard() {
   const [stats, setStats] = useState(null);
+  const { socket } = useAuth();
+
+  const loadStats = () => {
+    api.get('/admin/stats').then((r) => setStats(r.data.data)).catch(() => {});
+  };
+
   useEffect(() => {
-    api.get('/admin/stats').then((r) => setStats(r.data.data));
+    loadStats();
   }, []);
+
+  useEffect(() => {
+    if (!socket) return undefined;
+    const handlers = ['payment:success', 'session:paid', 'card:updated'];
+    const onRefresh = () => loadStats();
+    handlers.forEach((eventName) => socket.on(eventName, onRefresh));
+    return () => {
+      handlers.forEach((eventName) => socket.off(eventName, onRefresh));
+    };
+  }, [socket]);
+
   const cards = [
     ['Users', stats?.users],
     ['Pending approvals', stats?.pendingApprovals],

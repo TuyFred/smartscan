@@ -34,9 +34,25 @@ export function CustomerShell() {
 
 export function CustomerDashboard() {
   const [stats, setStats] = useState(null);
-  useEffect(() => {
+  const { socket } = useAuth();
+
+  const loadStats = () => {
     api.get('/admin/stats').then((r) => setStats(r.data.data)).catch(() => {});
+  };
+
+  useEffect(() => {
+    loadStats();
   }, []);
+
+  useEffect(() => {
+    if (!socket) return undefined;
+    const handlers = ['payment:success', 'session:paid', 'card:updated'];
+    handlers.forEach((eventName) => socket.on(eventName, loadStats));
+    return () => {
+      handlers.forEach((eventName) => socket.off(eventName, loadStats));
+    };
+  }, [socket]);
+
   const session = stats?.activeSession;
   const card = stats?.card;
   const remaining = card && session ? Number(card.balance) - Number(session.total_amount || 0) : null;
@@ -122,7 +138,7 @@ export function StartShopping() {
 }
 
 function SessionView({ allowScan }) {
-  const { triggerPaymentRequest, user } = useAuth();
+  const { triggerPaymentRequest, user, socket } = useAuth();
   const [session, setSession] = useState(null);
   const [scanner, setScanner] = useState(false);
   const [paymentHelp, setPaymentHelp] = useState(false);
@@ -139,6 +155,16 @@ function SessionView({ allowScan }) {
   useEffect(() => {
     load().catch(() => {});
   }, []);
+
+  useEffect(() => {
+    if (!socket) return undefined;
+    const handlers = ['payment:success', 'session:paid', 'card:updated'];
+    const onRefresh = () => load();
+    handlers.forEach((eventName) => socket.on(eventName, onRefresh));
+    return () => {
+      handlers.forEach((eventName) => socket.off(eventName, onRefresh));
+    };
+  }, [socket]);
 
   const onScanProduct = async (qrPayload) => {
     setScanner(false);

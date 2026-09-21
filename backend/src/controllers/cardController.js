@@ -3,6 +3,10 @@ const { money, generateCode, comparePassword, hashPassword } = require('../utils
 const { writeAudit } = require('../services/auditService');
 const { getSessionFull, recalculateSession } = require('./sessionController');
 
+function normalizeCardUid(value) {
+  return String(value ?? '').trim().replace(/:/g, '').toUpperCase();
+}
+
 exports.getMyCard = async (req, res) => {
   const { data: card } = await supabase
     .from('customer_cards')
@@ -77,12 +81,14 @@ exports.registerCard = async (req, res) => {
       return res.status(400).json({ success: false, message: 'customerId and cardUid required' });
     }
 
+    const normalizedUid = normalizeCardUid(cardUid);
+
     const { data, error } = await supabase
       .from('customer_cards')
       .upsert(
         {
           customer_id: customerId,
-          card_uid: String(cardUid).toUpperCase(),
+          card_uid: normalizedUid,
           balance: money(initialBalance),
           status: 'ACTIVE',
         },
@@ -100,7 +106,7 @@ exports.registerCard = async (req, res) => {
 exports.sellCard = async (req, res) => {
   try {
     const { customerId, cardUid, initialBalance = 0, notes } = req.body;
-    const uid = String(cardUid || '').trim().toUpperCase();
+    const uid = normalizeCardUid(cardUid);
     const loadAmount = money(initialBalance);
     if (!customerId || !uid) {
       return res.status(400).json({ success: false, message: 'Customer and RFID card UID are required' });
@@ -218,7 +224,7 @@ exports.deposit = async (req, res) => {
     }
 
     let query = supabase.from('customer_cards').select('*, users!customer_cards_customer_id_fkey(id, full_name, email)');
-    if (cardUid) query = query.eq('card_uid', String(cardUid).toUpperCase());
+    if (cardUid) query = query.eq('card_uid', normalizeCardUid(cardUid));
     else if (customerId) query = query.eq('customer_id', customerId);
     else return res.status(400).json({ success: false, message: 'customerId or cardUid required' });
 
@@ -339,7 +345,7 @@ exports.rfidRead = async (req, res) => {
     const rawCardUid = req.body?.cardUid;
     if (!rawCardUid) return res.status(400).json({ success: false, message: 'cardUid required' });
 
-    const cardUid = String(rawCardUid).trim().toUpperCase();
+    const cardUid = normalizeCardUid(rawCardUid);
 
     const { data: card } = await supabase
       .from('customer_cards')

@@ -40,10 +40,27 @@ export function ManagerShell() {
 export function ManagerDashboard() {
   const [stats, setStats] = useState(null);
   const [sessions, setSessions] = useState([]);
+  const { socket } = useAuth();
+
+  const loadDashboard = () => {
+    api.get('/admin/stats').then((r) => setStats(r.data.data)).catch(() => {});
+    api.get('/sessions?status=ACTIVE').then((r) => setSessions(r.data.data || [])).catch(() => {});
+  };
+
   useEffect(() => {
-    api.get('/admin/stats').then((r) => setStats(r.data.data));
-    api.get('/sessions?status=ACTIVE').then((r) => setSessions(r.data.data || []));
+    loadDashboard();
   }, []);
+
+  useEffect(() => {
+    if (!socket) return undefined;
+    const handlers = ['payment:success', 'session:paid', 'card:updated'];
+    const onRefresh = () => loadDashboard();
+    handlers.forEach((eventName) => socket.on(eventName, onRefresh));
+    return () => {
+      handlers.forEach((eventName) => socket.off(eventName, onRefresh));
+    };
+  }, [socket]);
+
   return (
     <div className="space-y-6">
       <div className="grid gap-4 md:grid-cols-4">
