@@ -1,5 +1,4 @@
 import { useEffect, useState } from 'react';
-import { Link } from 'react-router-dom';
 import {
   LayoutDashboard,
   Users,
@@ -46,12 +45,12 @@ const links = [
 ];
 
 export function AdminShell() {
-  return <DashboardLayout title="Platform Admin" links={links} variant="admin" />;
+  return <DashboardLayout title="Admin" links={links} variant="admin" />;
 }
 
 export function AdminDashboard() {
   const [stats, setStats] = useState(null);
-  const { socket, user } = useAuth();
+  const { socket } = useAuth();
 
   const loadStats = () => {
     api.get('/admin/stats').then((r) => setStats(r.data.data)).catch(() => {});
@@ -75,8 +74,8 @@ export function AdminDashboard() {
     { label: 'Users', value: stats?.users, tone: 'border-sky-200 bg-sky-50 text-sky-900' },
     { label: 'Pending approvals', value: stats?.pendingApprovals, tone: 'border-amber-200 bg-amber-50 text-amber-900' },
     { label: 'Pending PIN', value: stats?.pendingPinApprovals, tone: 'border-orange-200 bg-orange-50 text-orange-900' },
-    { label: 'Supermarkets', value: stats?.supermarkets, tone: 'border-indigo-200 bg-indigo-50 text-indigo-900' },
-    { label: 'Products', value: stats?.products, tone: 'border-violet-200 bg-violet-50 text-violet-900' },
+    { label: 'Supermarkets', value: stats?.supermarkets, tone: 'border-teal-200 bg-teal-50 text-teal-900' },
+    { label: 'Products', value: stats?.products, tone: 'border-indigo-200 bg-indigo-50 text-indigo-900' },
     { label: 'Sessions', value: stats?.shopping_sessions, tone: 'border-slate-200 bg-slate-50 text-slate-900' },
     { label: 'Payments', value: stats?.payments, tone: 'border-emerald-200 bg-emerald-50 text-emerald-900' },
     { label: 'Receipts', value: stats?.receipts, tone: 'border-cyan-200 bg-cyan-50 text-cyan-900' },
@@ -84,38 +83,12 @@ export function AdminDashboard() {
 
   return (
     <div className="space-y-4">
-      <div className="rounded-3xl bg-gradient-to-br from-slate-900 via-slate-900 to-indigo-950 p-5 text-white sm:p-6">
-        <div className="inline-flex items-center gap-2 rounded-full bg-indigo-500/20 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-indigo-200">
-          Platform Admin
-        </div>
-        <h2 className="mt-3 font-display text-2xl font-bold">System control center</h2>
+      <div className="rounded-3xl bg-slate-900 p-5 text-white sm:p-6">
+        <h2 className="font-display text-2xl font-bold">System status</h2>
         <p className="mt-1 text-sm text-slate-300">
-          You manage the whole SMARTSCAN platform — users, all supermarkets, approvals, and system reports. This is not a store manager view.
-        </p>
-        <p className="mt-2 text-xs text-slate-400">
-          Signed in as {user?.fullName || 'Admin'} · {user?.email}
+          Live platform counts. Manage users, approvals, PINs, all supermarkets, products, payments, and reports from the sidebar.
         </p>
       </div>
-
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-        <Link to="/admin/users" className="rounded-2xl border border-indigo-100 bg-white p-4 shadow-sm transition hover:border-indigo-300">
-          <div className="text-xs font-semibold uppercase tracking-wide text-indigo-500">Quick link</div>
-          <div className="mt-1 font-display text-lg font-bold text-slate-900">Users & approvals</div>
-        </Link>
-        <Link to="/admin/supermarkets" className="rounded-2xl border border-indigo-100 bg-white p-4 shadow-sm transition hover:border-indigo-300">
-          <div className="text-xs font-semibold uppercase tracking-wide text-indigo-500">Quick link</div>
-          <div className="mt-1 font-display text-lg font-bold text-slate-900">All supermarkets</div>
-        </Link>
-        <Link to="/admin/reports" className="rounded-2xl border border-indigo-100 bg-white p-4 shadow-sm transition hover:border-indigo-300">
-          <div className="text-xs font-semibold uppercase tracking-wide text-indigo-500">Quick link</div>
-          <div className="mt-1 font-display text-lg font-bold text-slate-900">System reports</div>
-        </Link>
-        <Link to="/admin/pin-requests" className="rounded-2xl border border-indigo-100 bg-white p-4 shadow-sm transition hover:border-indigo-300">
-          <div className="text-xs font-semibold uppercase tracking-wide text-indigo-500">Quick link</div>
-          <div className="mt-1 font-display text-lg font-bold text-slate-900">PIN approvals</div>
-        </Link>
-      </div>
-
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         {statusCards.map((card) => (
           <div key={card.label} className={`rounded-2xl border p-4 shadow-sm ${card.tone}`}>
@@ -688,15 +661,15 @@ export function AdminSupermarkets() {
 
   return (
     <div className="space-y-5">
-      <div className="overflow-hidden rounded-3xl border border-slate-200 bg-gradient-to-br from-slate-900 via-slate-900 to-indigo-950 p-6 text-white shadow-sm sm:p-7">
+      <div className="overflow-hidden rounded-3xl border border-slate-200 bg-gradient-to-br from-slate-900 via-slate-900 to-teal-900 p-6 text-white shadow-sm sm:p-7">
         <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
           <div className="max-w-2xl">
-            <div className="mb-2 inline-flex items-center gap-2 rounded-full bg-white/10 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-indigo-200">
-              <Building2 className="h-3.5 w-3.5" /> Platform administration
+            <div className="mb-2 inline-flex items-center gap-2 rounded-full bg-white/10 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-teal-200">
+              <Building2 className="h-3.5 w-3.5" /> Admin · Supermarkets
             </div>
-            <h2 className="font-display text-2xl font-bold sm:text-3xl">All supermarkets</h2>
+            <h2 className="font-display text-2xl font-bold sm:text-3xl">Supermarkets</h2>
             <p className="mt-2 text-sm leading-6 text-slate-300">
-              Create, edit, or deactivate stores and assign manager logins. Each manager only sees and runs their own supermarket.
+              Create a store with its own manager email and password. Admin stays separate — each manager only manages their store and products.
             </p>
           </div>
           <button type="button" onClick={() => setFormOpen(true)} className="ss-btn ss-btn-primary shrink-0">

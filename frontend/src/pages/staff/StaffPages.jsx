@@ -38,11 +38,11 @@ const managerLinks = [
   { to: '/manager/payments', label: 'Payments', icon: <CreditCard className="h-4 w-4" /> },
   { to: '/manager/supermarket', label: 'My Supermarket', icon: <Store className="h-4 w-4" /> },
   { to: '/manager/devices', label: 'Device Status', icon: <Shield className="h-4 w-4" /> },
-  { to: '/manager/reports', label: 'Store Reports', icon: <BarChart3 className="h-4 w-4" /> },
+  { to: '/manager/reports', label: 'Reports', icon: <BarChart3 className="h-4 w-4" /> },
 ];
 
 export function ManagerShell() {
-  return <DashboardLayout title="Store Manager" links={managerLinks} variant="manager" />;
+  return <DashboardLayout title="Manager" links={managerLinks} variant="manager" />;
 }
 
 export function ManagerDashboard() {
@@ -87,13 +87,10 @@ export function ManagerDashboard() {
 
   return (
     <div className="space-y-4">
-      <div className="rounded-3xl bg-gradient-to-br from-teal-900 via-slate-900 to-slate-950 p-5 text-white sm:p-6">
-        <div className="inline-flex items-center gap-2 rounded-full bg-teal-500/20 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-teal-200">
-          Store Manager · Owner
-        </div>
-        <h2 className="mt-3 font-display text-2xl font-bold">{storeName || 'Your supermarket'}</h2>
+      <div className="rounded-3xl bg-slate-900 p-5 text-white sm:p-6">
+        <h2 className="font-display text-2xl font-bold">{storeName || 'Store status'}</h2>
         <p className="mt-1 text-sm text-slate-300">
-          You only see and manage this supermarket — products, customers who scanned here, sessions, and payments. Platform-wide admin tools are not available here.
+          Live counts for your supermarket only. Add products from Products — Admin creates stores and manager logins.
         </p>
       </div>
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
@@ -760,16 +757,11 @@ export function ManagerPayments() {
   );
 }
 
-const emptyMarketForm = { name: '', description: '', address: '', branchName: '' };
-
 export function ManagerSupermarket() {
   const toast = useToast();
-  const { user, refreshMe, loginWithToken } = useAuth();
+  const { user, refreshMe } = useAuth();
   const [markets, setMarkets] = useState([]);
-  const [formOpen, setFormOpen] = useState(false);
-  const [form, setForm] = useState(emptyMarketForm);
   const [created, setCreated] = useState(null);
-  const [loading, setLoading] = useState(false);
   const [switchingId, setSwitchingId] = useState(null);
   const { page, setPage, pages, total, slice } = usePagination(markets);
 
@@ -777,28 +769,6 @@ export function ManagerSupermarket() {
   useEffect(() => {
     load();
   }, [user?.supermarketId]);
-
-  const create = async (e) => {
-    e.preventDefault();
-    setLoading(true);
-    try {
-      const { data } = await api.post('/supermarkets', form);
-      setCreated(data.data);
-      if (data.data?.token && data.data?.user) {
-        await loginWithToken(data.data.token, data.data.user);
-      } else {
-        await refreshMe();
-      }
-      setForm(emptyMarketForm);
-      setFormOpen(false);
-      toast.success(`Supermarket “${data.data?.supermarket?.name || form.name}” created — now managing it`);
-      load();
-    } catch (err) {
-      toast.error(err.response?.data?.message || 'Could not create supermarket');
-    } finally {
-      setLoading(false);
-    }
-  };
 
   const activate = async (marketId, name) => {
     setSwitchingId(marketId);
@@ -838,20 +808,15 @@ export function ManagerSupermarket() {
 
   return (
     <div className="space-y-5">
-      <div className="flex flex-col gap-3 rounded-3xl border border-slate-200 bg-white p-5 shadow-sm sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <h2 className="font-display text-xl font-bold">My supermarkets</h2>
-          <p className="mt-1 text-sm text-slate-500">
-            Only stores you own appear here. Click <strong>Manage this store</strong> to switch products, customers, sessions, and payments to that store alone.
-          </p>
-        </div>
-        <button type="button" onClick={() => setFormOpen(true)} className="ss-btn ss-btn-primary">
-          + Create supermarket
-        </button>
+      <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
+        <h2 className="font-display text-xl font-bold">My supermarket</h2>
+        <p className="mt-1 text-sm text-slate-500">
+          Only your assigned store appears here. Add and update products from Products. Creating new supermarkets is Admin only.
+        </p>
       </div>
 
       <div className="overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm">
-        <div className="border-b border-slate-100 px-5 py-4 font-semibold">Your markets</div>
+        <div className="border-b border-slate-100 px-5 py-4 font-semibold">Your store</div>
         <div className="divide-y divide-slate-100">
           {slice.map((m) => {
             const isActive = m.isActiveContext || m.id === user?.supermarketId;
@@ -871,14 +836,16 @@ export function ManagerSupermarket() {
                       <div className="mt-1 text-xs uppercase tracking-wide text-slate-400">Status: {m.status}</div>
                     </div>
                   </div>
-                  <button
-                    type="button"
-                    disabled={isActive || switchingId === m.id}
-                    onClick={() => activate(m.id, m.name)}
-                    className="ss-btn ss-btn-primary disabled:opacity-50"
-                  >
-                    {isActive ? 'Active' : switchingId === m.id ? 'Switching…' : 'Manage this store'}
-                  </button>
+                  {markets.length > 1 && (
+                    <button
+                      type="button"
+                      disabled={isActive || switchingId === m.id}
+                      onClick={() => activate(m.id, m.name)}
+                      className="ss-btn ss-btn-primary disabled:opacity-50"
+                    >
+                      {isActive ? 'Active' : switchingId === m.id ? 'Switching…' : 'Manage this store'}
+                    </button>
+                  )}
                 </div>
                 <div className="mt-4 space-y-2">
                   <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Branches · entrance QR</p>
@@ -902,60 +869,13 @@ export function ManagerSupermarket() {
             );
           })}
           {!markets.length && (
-            <div className="p-8 text-center text-slate-400">No supermarket yet. Create one to get an entrance QR.</div>
+            <div className="p-8 text-center text-slate-400">
+              No supermarket assigned. Ask Admin to create your store and manager login.
+            </div>
           )}
         </div>
         <Pagination page={page} pages={pages} total={total} onChange={setPage} label="markets" />
       </div>
-
-      <Modal open={formOpen} title="Create supermarket" onClose={() => setFormOpen(false)} wide>
-        <form onSubmit={create} className="grid gap-3 sm:grid-cols-2">
-          <label className="text-sm font-medium text-slate-700">
-            Supermarket name
-            <input
-              required
-              className="field-input mt-1"
-              value={form.name}
-              onChange={(e) => setForm({ ...form, name: e.target.value })}
-              placeholder="ABC Supermarket"
-            />
-          </label>
-          <label className="text-sm font-medium text-slate-700">
-            Main branch name
-            <input
-              className="field-input mt-1"
-              value={form.branchName}
-              onChange={(e) => setForm({ ...form, branchName: e.target.value })}
-              placeholder="Kigali Main Branch"
-            />
-          </label>
-          <label className="text-sm font-medium text-slate-700 sm:col-span-2">
-            Address
-            <input
-              className="field-input mt-1"
-              value={form.address}
-              onChange={(e) => setForm({ ...form, address: e.target.value })}
-            />
-          </label>
-          <label className="text-sm font-medium text-slate-700 sm:col-span-2">
-            Description
-            <textarea
-              className="field-input mt-1"
-              rows={2}
-              value={form.description}
-              onChange={(e) => setForm({ ...form, description: e.target.value })}
-            />
-          </label>
-          <div className="flex flex-col-reverse gap-2 sm:col-span-2 sm:flex-row sm:justify-end">
-            <button type="button" onClick={() => setFormOpen(false)} className="ss-btn ss-btn-ghost">
-              Cancel
-            </button>
-            <button type="submit" disabled={loading} className="ss-btn ss-btn-primary disabled:opacity-60">
-              {loading ? 'Creating…' : 'Create supermarket'}
-            </button>
-          </div>
-        </form>
-      </Modal>
 
       <Modal open={Boolean(created?.branchQr)} title="Branch entrance QR" onClose={() => setCreated(null)}>
         {created?.branchQr && (

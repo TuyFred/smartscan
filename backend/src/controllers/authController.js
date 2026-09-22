@@ -476,25 +476,33 @@ exports.me = async (req, res) => {
       .single();
     user = fallback.data;
     if (!user) return res.status(404).json({ success: false, message: 'User not found' });
+  }
 
-    let supermarketName = null;
-    if (user.supermarket_id) {
-      const { data: market } = await supabase
-        .from('supermarkets')
-        .select('name')
-        .eq('id', user.supermarket_id)
-        .maybeSingle();
-      supermarketName = market?.name || null;
-    }
-    return res.json({
-      success: true,
-      data: publicUser(user, user.roles?.name, { supermarketName }),
-    });
+  const roleName = user.roles?.name;
+
+  // Keep admin account platform-only — clear accidental store binding from display/context
+  if (roleName === 'ADMIN' && user.supermarket_id) {
+    await supabase.from('users').update({ supermarket_id: null, branch_id: null }).eq('id', user.id);
+    user.supermarket_id = null;
+    user.branch_id = null;
+    user.supermarkets = null;
+  }
+
+  let supermarketName = user.supermarkets?.name || null;
+  if (!supermarketName && user.supermarket_id && roleName !== 'ADMIN') {
+    const { data: market } = await supabase
+      .from('supermarkets')
+      .select('name')
+      .eq('id', user.supermarket_id)
+      .maybeSingle();
+    supermarketName = market?.name || null;
   }
 
   return res.json({
     success: true,
-    data: publicUser(user, user.roles?.name, { supermarketName: user.supermarkets?.name || null }),
+    data: publicUser(user, roleName, {
+      supermarketName: roleName === 'ADMIN' ? null : supermarketName,
+    }),
   });
 };
 

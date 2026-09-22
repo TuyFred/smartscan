@@ -1,5 +1,5 @@
 import { NavLink, Outlet, useNavigate } from 'react-router-dom';
-import { LogOut, Menu, ScanLine, Shield, Store, X } from 'lucide-react';
+import { LogOut, Menu, ScanLine, X } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { useAuth } from '../lib/auth';
 import PaymentPopup from './PaymentPopup';
@@ -7,31 +7,31 @@ import PaymentPopup from './PaymentPopup';
 const VARIANTS = {
   admin: {
     aside: 'bg-slate-950',
-    brandIcon: 'bg-indigo-500',
-    activeNav: 'bg-indigo-500/20 text-indigo-200',
-    roleTone: 'text-indigo-300',
-    badge: 'Platform Admin',
+    brandIcon: 'bg-teal-500',
+    activeNav: 'bg-teal-500/20 text-teal-200',
+    roleTone: 'text-slate-400',
+    badge: 'ADMIN',
   },
   manager: {
     aside: 'bg-slate-950',
     brandIcon: 'bg-teal-500',
     activeNav: 'bg-teal-500/20 text-teal-200',
     roleTone: 'text-teal-300',
-    badge: 'Store Manager',
+    badge: 'MANAGER',
   },
   cashier: {
     aside: 'bg-slate-950',
-    brandIcon: 'bg-amber-500',
-    activeNav: 'bg-amber-500/20 text-amber-200',
-    roleTone: 'text-amber-300',
-    badge: 'Cashier',
+    brandIcon: 'bg-teal-500',
+    activeNav: 'bg-teal-500/20 text-teal-200',
+    roleTone: 'text-slate-400',
+    badge: 'CASHIER',
   },
   customer: {
     aside: 'bg-slate-950',
     brandIcon: 'bg-teal-500',
     activeNav: 'bg-teal-500/20 text-teal-200',
-    roleTone: 'text-teal-300',
-    badge: 'Customer',
+    roleTone: 'text-slate-400',
+    badge: 'CUSTOMER',
   },
 };
 
@@ -53,7 +53,7 @@ export default function DashboardLayout({ title, links, variant = 'customer' }) 
     navigate('/');
   };
 
-  const RoleIcon = variant === 'admin' ? Shield : variant === 'manager' ? Store : ScanLine;
+  const RoleIcon = ScanLine;
 
   return (
     <div className="min-h-screen bg-slate-100 lg:flex">
@@ -78,8 +78,8 @@ export default function DashboardLayout({ title, links, variant = 'customer' }) 
             </div>
             <div className="min-w-0">
               <div className="font-display text-base font-bold tracking-wide sm:text-lg">SMARTSCAN</div>
-              <div className={`truncate text-[11px] font-semibold uppercase tracking-wider ${theme.roleTone}`}>
-                {theme.badge}
+              <div className={`truncate text-[11px] uppercase tracking-wider ${theme.roleTone}`}>
+                {user?.role || theme.badge}
               </div>
             </div>
           </div>
@@ -94,13 +94,6 @@ export default function DashboardLayout({ title, links, variant = 'customer' }) 
             <div className="mt-0.5 truncate text-sm font-semibold text-teal-200">
               {user?.supermarketName || 'No active supermarket'}
             </div>
-          </div>
-        )}
-
-        {variant === 'admin' && (
-          <div className="border-b border-white/10 px-4 py-3">
-            <div className="text-[10px] font-semibold uppercase tracking-wider text-slate-500">Scope</div>
-            <div className="mt-0.5 text-sm font-semibold text-indigo-200">Entire platform</div>
           </div>
         )}
 
@@ -157,9 +150,7 @@ export default function DashboardLayout({ title, links, variant = 'customer' }) 
             <img src={user.profileImage} alt="" className="h-9 w-9 shrink-0 rounded-full object-cover sm:h-10 sm:w-10" />
           ) : (
             <div
-              className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-sm font-semibold sm:h-10 sm:w-10 ${
-                variant === 'admin' ? 'bg-indigo-100 text-indigo-800' : 'bg-teal-100 text-teal-800'
-              }`}
+              className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-teal-100 text-sm font-semibold text-teal-800 sm:h-10 sm:w-10"
             >
               {user?.fullName?.charAt(0) || 'U'}
             </div>

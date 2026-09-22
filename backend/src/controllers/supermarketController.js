@@ -1,6 +1,6 @@
 const QRCode = require('qrcode');
 const { supabase } = require('../config/supabase');
-const { generateCode, signToken, hashPassword } = require('../utils/security');
+const { generateCode, hashPassword } = require('../utils/security');
 const { writeAudit } = require('../services/auditService');
 
 exports.listSupermarkets = async (req, res) => {
@@ -60,6 +60,13 @@ exports.listSupermarkets = async (req, res) => {
 
 exports.createSupermarket = async (req, res) => {
   try {
+    if (req.user.role !== 'ADMIN') {
+      return res.status(403).json({
+        success: false,
+        message: 'Only Admin can create supermarkets. Managers manage products for their assigned store only.',
+      });
+    }
+
     const {
       name,
       description,
@@ -86,74 +93,82 @@ exports.createSupermarket = async (req, res) => {
       return res.status(500).json({ success: false, message: 'MANAGER role missing' });
     }
 
-    let ownerId = req.user.id;
+    let ownerId = null;
     let managerAccount = null;
-    let issuedToken = null;
-    const isAdmin = req.user.role === 'ADMIN';
+    const emailNorm = String(managerEmail || '').trim().toLowerCase();
+    const password = String(managerPassword || '');
+    const fullName = String(managerFullName || '').trim();
 
-    if (isAdmin) {
-      const emailNorm = String(managerEmail || '').trim().toLowerCase();
-      const password = String(managerPassword || '');
-      const fullName = String(managerFullName || '').trim();
+    if (emailNorm && emailNorm === String(req.user.email || '').toLowerCase()) {
+      return res.status(400).json({
+        success: false,
+        message: 'Manager email must be different from the admin account. Create a separate manager login.',
+      });
+    }
+    if (emailNorm === 'admin@smartscan.rw') {
+      return res.status(400).json({
+        success: false,
+        message: 'admin@smartscan.rw is reserved for platform admin. Use a different manager email.',
+      });
+    }
 
-      if (bodyOwnerId) {
-        ownerId = bodyOwnerId;
-      } else if (emailNorm && password) {
-        if (!fullName) {
-          return res.status(400).json({ success: false, message: 'Manager full name is required' });
-        }
-        if (password.length < 6) {
-          return res.status(400).json({
-            success: false,
-            message: 'Manager password must be at least 6 characters',
-          });
-        }
-
-        const { data: existing } = await supabase
-          .from('users')
-          .select('id, email')
-          .eq('email', emailNorm)
-          .maybeSingle();
-
-        if (existing) {
-          return res.status(409).json({
-            success: false,
-            message: 'That email is already registered. Use a new email for this supermarket manager.',
-          });
-        }
-
-        const passwordHash = await hashPassword(password);
-        const { data: createdUser, error: userErr } = await supabase
-          .from('users')
-          .insert({
-            full_name: fullName,
-            email: emailNorm,
-            phone: managerPhone || phone || null,
-            password_hash: passwordHash,
-            role_id: managerRole.id,
-            email_verified: true,
-            account_status: 'APPROVED',
-            is_active: true,
-          })
-          .select('id, full_name, email, phone')
-          .single();
-        if (userErr) throw userErr;
-
-        ownerId = createdUser.id;
-        managerAccount = {
-          id: createdUser.id,
-          fullName: createdUser.full_name,
-          email: createdUser.email,
-          phone: createdUser.phone,
-          role: 'MANAGER',
-        };
-      } else {
+    if (bodyOwnerId) {
+      ownerId = bodyOwnerId;
+    } else if (emailNorm && password) {
+      if (!fullName) {
+        return res.status(400).json({ success: false, message: 'Manager full name is required' });
+      }
+      if (password.length < 6) {
         return res.status(400).json({
           success: false,
-          message:
-            'Provide manager full name, email, and password so they can log in to manage this supermarket.',
+          message: 'Manager password must be at least 6 characters',
         });
       }
+
+      const { data: existing } = await supabase
+        .from('users')
+        .select('id, email')
+        .eq('email', emailNorm)
+        .maybeSingle();
+
+      if (existing) {
+        return res.status(409).json({
+          success: false,
+          message: 'That email is already registered. Use a new email for this supermarket manager.',
+        });
+      }
+
+      const passwordHash = await hashPassword(password);
+      const { data: createdUser, error: userErr } = await supabase
+        .from('users')
+        .insert({
+          full_name: fullName,
+          email: emailNorm,
+          phone: managerPhone || phone || null,
+          password_hash: passwordHash,
+          role_id: managerRole.id,
+          email_verified: true,
+          account_status: 'APPROVED',
+          is_active: true,
+        })
+        .select('id, full_name, email, phone')
+        .single();
+      if (userErr) throw userErr;
+
+      ownerId = createdUser.id;
+      managerAccount = {
+        id: createdUser.id,
+        fullName: createdUser.full_name,
+        email: createdUser.email,
+        phone: createdUser.phone,
+        role: 'MANAGER',
+      };
+    } else {
+      return res.status(400).json({
+        success: false,
+        message:
+          'Provide manager full name, email, and password so they can log in to manage this supermarket.',
+      });
     }
 
     const { data: market, error } = await supabase
@@ -164,7 +179,7 @@ exports.createSupermarket = async (req, res) => {
         address: address || null,
         phone: phone || null,
         email: email || managerEmail || null,
-        logo: req.file ? `/uploads/${req.file.filename}` : null,
+        logo: req.file ? /uploads/ : null,
         owner_id: ownerId,
         status: 'ACTIVE',
       })
@@ -188,39 +203,39 @@ exports.createSupermarket = async (req, res) => {
       .single();
     if (bErr) throw bErr;
 
-    // Link manager account to this supermarket (never demote ADMIN)
-    await supabase
+    // Guard: never demote ADMIN to MANAGER. Only update if the target is not an ADMIN.
+    const { data: targetUser } = await supabase
       .from('users')
-      .update({
-        role_id: managerRole.id,
-        supermarket_id: market.id,
-        branch_id: branch.id,
-        account_status: 'APPROVED',
-        is_active: true,
-        email_verified: true,
-      })
-      .eq('id', ownerId);
+      .select('id, roles(name)')
+      .eq('id', ownerId)
+      .maybeSingle();
+    const targetRole = targetUser?.roles?.name;
+    if (targetRole !== 'ADMIN') {
+      await supabase
+        .from('users')
+        .update({
+          role_id: managerRole.id,
+          supermarket_id: market.id,
+          branch_id: branch.id,
+          account_status: 'APPROVED',
+          is_active: true,
+          email_verified: true,
+        })
+        .eq('id', ownerId);
+    }
 
     await writeAudit({
       userId: req.user.id,
       action: 'CREATE_SUPERMARKET',
       entityType: 'supermarkets',
       entityId: market.id,
-      details: { name, managerEmail: managerAccount?.email || null, adminProvisioned: isAdmin },
+      details: { name, managerEmail: managerAccount?.email || null, adminProvisioned: true },
       ip: req.ip,
     });
 
     const qrDataUrl = await QRCode.toDataURL(qrPayload);
 
-    if (!isAdmin) {
-      issuedToken = signToken({ id: ownerId, role: 'MANAGER', email: req.user.email });
-      managerAccount = {
-        id: ownerId,
-        fullName: req.user.fullName,
-        email: req.user.email,
-        role: 'MANAGER',
-      };
-    } else if (!managerAccount) {
+    if (!managerAccount) {
       const { data: ownerRow } = await supabase
         .from('users')
         .select('id, full_name, email, phone')
@@ -239,29 +254,13 @@ exports.createSupermarket = async (req, res) => {
 
     return res.status(201).json({
       success: true,
-      message: isAdmin
-        ? `Supermarket created. Manager can log in with ${managerAccount?.email || 'their email'}.`
-        : 'Supermarket created. You are now the owner/manager.',
+      message: `Supermarket created. Manager can log in with ${managerAccount?.email || 'their email'}.`,
       data: {
         supermarket: market,
         branch,
         branchQr: qrDataUrl,
         qrPayload,
         manager: managerAccount,
-        ...(issuedToken
-          ? {
-              token: issuedToken,
-              user: {
-                id: ownerId,
-                email: req.user.email,
-                fullName: req.user.fullName,
-                role: 'MANAGER',
-                supermarketId: market.id,
-                branchId: branch.id,
-                accountStatus: 'APPROVED',
-              },
-            }
-          : {}),
       },
     });
   } catch (err) {
