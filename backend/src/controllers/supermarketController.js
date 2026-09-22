@@ -422,23 +422,28 @@ exports.deleteSupermarket = async (req, res) => {
       .maybeSingle();
     if (findErr || !market) return res.status(404).json({ success: false, message: 'Supermarket not found' });
 
-    // Soft-delete store + deactivate products/branches to keep history
-    await supabase.from('supermarkets').update({ status: 'INACTIVE' }).eq('id', id);
-    await supabase.from('branches').update({ status: 'INACTIVE' }).eq('supermarket_id', id);
-    await supabase.from('products').update({ status: 'INACTIVE' }).eq('supermarket_id', id);
+    // Hard-delete: remove products, branches, then the supermarket
+    await supabase.from('products').delete().eq('supermarket_id', id);
+    await supabase.from('branches').delete().eq('supermarket_id', id);
+    // Clear manager binding before deleting the store
+    await supabase
+      .from('users')
+      .update({ supermarket_id: null, branch_id: null })
+      .eq('supermarket_id', id);
+    await supabase.from('supermarkets').delete().eq('id', id);
 
     await writeAudit({
       userId: req.user.id,
       action: 'DELETE_SUPERMARKET',
       entityType: 'supermarkets',
       entityId: id,
-      details: { name: market.name, mode: 'soft' },
+      details: { name: market.name, mode: 'hard' },
       ip: req.ip,
     });
 
     return res.json({
       success: true,
-      message: `Supermarket “${market.name}” deactivated. Managers can no longer operate it.`,
+      message: `Supermarket “${market.name}” has been permanently removed.`,
     });
   } catch (err) {
     return res.status(500).json({ success: false, message: err.message });

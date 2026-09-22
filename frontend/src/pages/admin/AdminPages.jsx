@@ -649,10 +649,10 @@ export function AdminSupermarkets() {
   };
 
   const removeMarket = async (m) => {
-    if (!window.confirm(`Deactivate supermarket “${m.name}”? Products and branches will be deactivated.`)) return;
+    if (!window.confirm(`Permanently remove "${m.name}"? All products and branches will be permanently deleted. This cannot be undone.`)) return;
     try {
       const { data } = await api.delete(`/supermarkets/${m.id}`);
-      toast.success(data.message || 'Supermarket deactivated');
+      toast.success(data.message || 'Supermarket permanently removed');
       load();
     } catch (err) {
       toast.error(err.response?.data?.message || 'Could not delete supermarket');
@@ -754,7 +754,7 @@ export function AdminSupermarkets() {
                       <button type="button" title="Edit" className="ss-icon-btn ss-icon-edit" onClick={() => openEdit(m)}>
                         <Pencil />
                       </button>
-                      <button type="button" title="Deactivate" className="ss-icon-btn ss-icon-danger" onClick={() => removeMarket(m)}>
+                      <button type="button" title="Remove permanently" className="ss-icon-btn ss-icon-danger" onClick={() => removeMarket(m)}>
                         <Trash2 />
                       </button>
                     </div>
