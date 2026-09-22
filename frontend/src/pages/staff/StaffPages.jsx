@@ -47,7 +47,7 @@ export function ManagerShell() {
 
 export function ManagerDashboard() {
   const [stats, setStats] = useState(null);
-  const { socket } = useAuth();
+  const { socket, user } = useAuth();
 
   const loadDashboard = () => {
     api.get('/admin/stats').then((r) => setStats(r.data.data)).catch(() => {});
@@ -55,7 +55,7 @@ export function ManagerDashboard() {
 
   useEffect(() => {
     loadDashboard();
-  }, []);
+  }, [user?.supermarketId]);
 
   useEffect(() => {
     if (!socket) return undefined;
@@ -79,7 +79,9 @@ export function ManagerDashboard() {
     <div className="space-y-4">
       <div className="rounded-3xl bg-slate-900 p-5 text-white sm:p-6">
         <h2 className="font-display text-2xl font-bold">Store status</h2>
-        <p className="mt-1 text-sm text-slate-300">Live supermarket counts only. Full reports are in Reports.</p>
+        <p className="mt-1 text-sm text-slate-300">
+          Live counts for your <strong className="text-teal-300">active</strong> supermarket only. Switch stores under My Supermarket.
+        </p>
       </div>
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
         {statusCards.map((card) => (
@@ -161,10 +163,11 @@ function SessionsTable({ rows, paginate = false }) {
 }
 
 export function ManagerSessions() {
+  const { user } = useAuth();
   const [rows, setRows] = useState([]);
   useEffect(() => {
     api.get('/sessions').then((r) => setRows(r.data.data || []));
-  }, []);
+  }, [user?.supermarketId]);
   return <SessionsTable rows={rows} paginate />;
 }
 
@@ -247,6 +250,7 @@ const emptyProductForm = {
   quantityAvailable: '50',
   category: 'Grocery',
   description: '',
+  status: 'ACTIVE',
 };
 
 export function ManagerProducts() {
@@ -254,6 +258,7 @@ export function ManagerProducts() {
   const toast = useToast();
   const [products, setProducts] = useState([]);
   const [formOpen, setFormOpen] = useState(false);
+  const [editing, setEditing] = useState(null);
   const [form, setForm] = useState(emptyProductForm);
   const [qr, setQr] = useState(null);
   const [loading, setLoading] = useState(false);
@@ -262,26 +267,76 @@ export function ManagerProducts() {
   const load = () => api.get('/products').then((r) => setProducts(r.data.data || []));
   useEffect(() => {
     load();
-  }, []);
+  }, [user?.supermarketId]);
 
-  const create = async (e) => {
+  const openCreate = () => {
+    setEditing(null);
+    setForm(emptyProductForm);
+    setFormOpen(true);
+  };
+
+  const openEdit = (p) => {
+    setEditing(p);
+    setForm({
+      name: p.name || '',
+      category: p.category || 'General',
+      description: p.description || '',
+      price: String(p.price ?? ''),
+      weight: String(p.weight ?? ''),
+      unit: p.unit || 'pcs',
+      quantityAvailable: String(p.quantity_available ?? 0),
+      status: p.status || 'ACTIVE',
+    });
+    setFormOpen(true);
+  };
+
+  const save = async (e) => {
     e.preventDefault();
+    if (!user?.supermarketId) {
+      toast.error('Select an active supermarket first (My Supermarket)');
+      return;
+    }
     setLoading(true);
     try {
-      const { data } = await api.post('/products', {
-        ...form,
-        weight: Number(form.weight || 0),
-        supermarketId: user.supermarketId,
-      });
-      setQr(data.data);
+      if (editing) {
+        await api.put(`/products/${editing.id}`, {
+          name: form.name,
+          category: form.category,
+          description: form.description,
+          weight: Number(form.weight || 0),
+          price: Number(form.price || 0),
+          unit: form.unit,
+          quantityAvailable: Number(form.quantityAvailable || 0),
+          status: form.status || 'ACTIVE',
+        });
+        toast.success(`Product “${form.name}” updated`);
+      } else {
+        const { data } = await api.post('/products', {
+          ...form,
+          weight: Number(form.weight || 0),
+          supermarketId: user.supermarketId,
+        });
+        setQr(data.data);
+        toast.success(`Product “${data.data?.product?.name || form.name}” created`);
+      }
       setForm(emptyProductForm);
+      setEditing(null);
       setFormOpen(false);
-      toast.success(`Product “${data.data?.product?.name || form.name}” created`);
       load();
     } catch (err) {
-      toast.error(err.response?.data?.message || 'Could not create product');
+      toast.error(err.response?.data?.message || (editing ? 'Could not update product' : 'Could not create product'));
     } finally {
       setLoading(false);
+    }
+  };
+
+  const deactivate = async (p) => {
+    try {
+      await api.delete(`/products/${p.id}`);
+      toast.success(`“${p.name}” deactivated`);
+      load();
+    } catch (err) {
+      toast.error(err.response?.data?.message || 'Could not deactivate');
     }
   };
 
@@ -309,10 +364,17 @@ export function ManagerProducts() {
           <Scale className="mt-0.5 h-6 w-6 text-teal-600" />
           <div>
             <h2 className="font-display text-xl font-bold">Products</h2>
-            <p className="mt-1 text-sm text-slate-500">Manage stock and product QR labels.</p>
+            <p className="mt-1 text-sm text-slate-500">
+              Manage stock for your <strong>active</strong> supermarket only. Switch stores under My Supermarket.
+            </p>
+            {!user?.supermarketId && (
+              <p className="mt-2 text-sm font-medium text-amber-700">
+                No active supermarket selected. Open My Supermarket and click Manage.
+              </p>
+            )}
           </div>
         </div>
-        <button type="button" onClick={() => setFormOpen(true)} className="ss-btn ss-btn-primary">
+        <button type="button" onClick={openCreate} className="ss-btn ss-btn-primary" disabled={!user?.supermarketId}>
           + Add product
         </button>
       </div>
@@ -327,7 +389,8 @@ export function ManagerProducts() {
                 <th className="center">Weight</th>
                 <th className="center">Price</th>
                 <th className="center">Stock</th>
-                <th className="center">QR</th>
+                <th className="center">Status</th>
+                <th className="center">Actions</th>
               </tr>
             </thead>
             <tbody>
@@ -343,16 +406,31 @@ export function ManagerProducts() {
                   <td className="center">{formatRwf(p.price)}</td>
                   <td className="center">{p.quantity_available}</td>
                   <td className="center">
-                    <button type="button" className="ss-btn ss-btn-ghost" onClick={() => showQr(p.id)}>
-                      <QrCode className="h-4 w-4" /> View QR
-                    </button>
+                    <span className={`ss-badge ${p.status === 'ACTIVE' ? 'ss-badge-ok' : 'ss-badge-warn'}`}>
+                      {p.status}
+                    </span>
+                  </td>
+                  <td className="center">
+                    <div className="flex flex-wrap items-center justify-center gap-2">
+                      <button type="button" className="ss-btn ss-btn-ghost" onClick={() => openEdit(p)}>
+                        Edit
+                      </button>
+                      <button type="button" className="ss-btn ss-btn-ghost" onClick={() => showQr(p.id)}>
+                        <QrCode className="h-4 w-4" /> QR
+                      </button>
+                      {p.status === 'ACTIVE' && (
+                        <button type="button" className="ss-btn ss-btn-ghost text-red-600" onClick={() => deactivate(p)}>
+                          Off
+                        </button>
+                      )}
+                    </div>
                   </td>
                 </tr>
               ))}
               {!products.length && (
                 <tr>
-                  <td colSpan={5} className="center text-slate-400">
-                    No products yet
+                  <td colSpan={6} className="center text-slate-400">
+                    No products yet for this supermarket
                   </td>
                 </tr>
               )}
@@ -362,8 +440,8 @@ export function ManagerProducts() {
         <Pagination page={page} pages={pages} total={total} onChange={setPage} label="products" />
       </div>
 
-      <Modal open={formOpen} title="Add product" onClose={() => setFormOpen(false)} wide>
-        <form onSubmit={create} className="grid gap-3 sm:grid-cols-2">
+      <Modal open={formOpen} title={editing ? 'Update product' : 'Add product'} onClose={() => setFormOpen(false)} wide>
+        <form onSubmit={save} className="grid gap-3 sm:grid-cols-2">
           <label className="text-sm font-medium text-slate-700 sm:col-span-2">
             Product name
             <input
@@ -441,12 +519,25 @@ export function ManagerProducts() {
               placeholder="Optional"
             />
           </label>
+          {editing && (
+            <label className="text-sm font-medium text-slate-700 sm:col-span-2">
+              Status
+              <select
+                className="field-input mt-1"
+                value={form.status || 'ACTIVE'}
+                onChange={(e) => setForm({ ...form, status: e.target.value })}
+              >
+                <option value="ACTIVE">ACTIVE</option>
+                <option value="INACTIVE">INACTIVE</option>
+              </select>
+            </label>
+          )}
           <div className="flex flex-col-reverse gap-2 sm:col-span-2 sm:flex-row sm:justify-end">
             <button type="button" onClick={() => setFormOpen(false)} className="ss-btn ss-btn-ghost">
               Cancel
             </button>
             <button type="submit" disabled={loading} className="ss-btn ss-btn-primary disabled:opacity-60">
-              {loading ? 'Creating…' : 'Create product'}
+              {loading ? 'Saving…' : editing ? 'Save changes' : 'Create product'}
             </button>
           </div>
         </form>
@@ -480,6 +571,7 @@ export function ManagerProducts() {
 }
 
 export function ManagerCustomers() {
+  const { user } = useAuth();
   const [rows, setRows] = useState([]);
   const [q, setQ] = useState('');
   const [loading, setLoading] = useState(true);
@@ -500,7 +592,7 @@ export function ManagerCustomers() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [user?.supermarketId]);
 
   const needle = q.trim().toLowerCase();
   const filtered = useMemo(() => {
@@ -520,7 +612,9 @@ export function ManagerCustomers() {
         <div className="flex flex-col gap-3 border-b border-slate-100 p-5 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <h2 className="font-display text-xl font-bold">Store customers</h2>
-            <p className="text-sm text-slate-500">Shoppers who bought in your supermarket. Live filter as you type.</p>
+            <p className="text-sm text-slate-500">
+              Only shoppers who scanned this supermarket&apos;s entrance QR or bought here. Other stores&apos; customers stay hidden.
+            </p>
           </div>
           <div className="ss-search max-w-md">
             <Search className="ss-search-icon h-4 w-4" />
@@ -591,7 +685,7 @@ export function ManagerCustomers() {
               {!loading && !slice.length && (
                 <tr>
                   <td colSpan={6} className="center text-slate-400">
-                    No customers match your filter.
+                    No customers have scanned or shopped at this supermarket yet.
                   </td>
                 </tr>
               )}
@@ -605,15 +699,20 @@ export function ManagerCustomers() {
 }
 
 export function ManagerPayments() {
+  const { user } = useAuth();
   const [rows, setRows] = useState([]);
   const { page, setPage, pages, total, slice } = usePagination(rows);
 
   useEffect(() => {
     api.get('/payments').then((r) => setRows(r.data.data || []));
-  }, []);
+  }, [user?.supermarketId]);
 
   return (
     <div className="overflow-hidden rounded-2xl bg-white shadow-sm">
+      <div className="border-b border-slate-100 px-5 py-4">
+        <h2 className="font-display text-xl font-bold">Payments</h2>
+        <p className="text-sm text-slate-500">Completed RFID payments for your active supermarket only.</p>
+      </div>
       <div className="table-wrap">
         <table className="ss-table">
           <thead>
@@ -652,17 +751,19 @@ const emptyMarketForm = { name: '', description: '', address: '', branchName: ''
 
 export function ManagerSupermarket() {
   const toast = useToast();
+  const { user, refreshMe, loginWithToken } = useAuth();
   const [markets, setMarkets] = useState([]);
   const [formOpen, setFormOpen] = useState(false);
   const [form, setForm] = useState(emptyMarketForm);
   const [created, setCreated] = useState(null);
   const [loading, setLoading] = useState(false);
+  const [switchingId, setSwitchingId] = useState(null);
   const { page, setPage, pages, total, slice } = usePagination(markets);
 
   const load = () => api.get('/supermarkets').then((r) => setMarkets(r.data.data || []));
   useEffect(() => {
     load();
-  }, []);
+  }, [user?.supermarketId]);
 
   const create = async (e) => {
     e.preventDefault();
@@ -670,17 +771,33 @@ export function ManagerSupermarket() {
     try {
       const { data } = await api.post('/supermarkets', form);
       setCreated(data.data);
-      if (data.data?.token) {
-        localStorage.setItem('smartscan_token', data.data.token);
+      if (data.data?.token && data.data?.user) {
+        await loginWithToken(data.data.token, data.data.user);
+      } else {
+        await refreshMe();
       }
       setForm(emptyMarketForm);
       setFormOpen(false);
-      toast.success(`Supermarket “${data.data?.supermarket?.name || form.name}” created`);
+      toast.success(`Supermarket “${data.data?.supermarket?.name || form.name}” created — now managing it`);
       load();
     } catch (err) {
       toast.error(err.response?.data?.message || 'Could not create supermarket');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const activate = async (marketId, name) => {
+    setSwitchingId(marketId);
+    try {
+      const { data } = await api.post(`/supermarkets/${marketId}/activate`);
+      await refreshMe();
+      toast.success(data.message || `Now managing ${name}`);
+      load();
+    } catch (err) {
+      toast.error(err.response?.data?.message || 'Could not switch supermarket');
+    } finally {
+      setSwitchingId(null);
     }
   };
 
@@ -710,8 +827,10 @@ export function ManagerSupermarket() {
     <div className="space-y-5">
       <div className="flex flex-col gap-3 rounded-3xl border border-slate-200 bg-white p-5 shadow-sm sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h2 className="font-display text-xl font-bold">My supermarket</h2>
-          <p className="mt-1 text-sm text-slate-500">Branches and entrance QR codes.</p>
+          <h2 className="font-display text-xl font-bold">My supermarkets</h2>
+          <p className="mt-1 text-sm text-slate-500">
+            List every store you own. Click <strong>Manage</strong> to switch products, customers, sessions, and payments to that store.
+          </p>
         </div>
         <button type="button" onClick={() => setFormOpen(true)} className="ss-btn ss-btn-primary">
           + Create supermarket
@@ -721,40 +840,54 @@ export function ManagerSupermarket() {
       <div className="overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm">
         <div className="border-b border-slate-100 px-5 py-4 font-semibold">Your markets</div>
         <div className="divide-y divide-slate-100">
-          {slice.map((m) => (
-            <div key={m.id} className="p-5">
-              <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-                <div className="flex items-start gap-3">
-                  <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-teal-50 text-teal-700">
-                    <Store className="h-5 w-5" />
+          {slice.map((m) => {
+            const isActive = m.isActiveContext || m.id === user?.supermarketId;
+            return (
+              <div key={m.id} className={`p-5 ${isActive ? 'bg-teal-50/40' : ''}`}>
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                  <div className="flex items-start gap-3">
+                    <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-teal-50 text-teal-700">
+                      <Store className="h-5 w-5" />
+                    </div>
+                    <div>
+                      <div className="flex flex-wrap items-center gap-2">
+                        <div className="font-display text-lg font-bold">{m.name}</div>
+                        {isActive && <span className="ss-badge ss-badge-ok">Managing now</span>}
+                      </div>
+                      <div className="text-sm text-slate-500">{m.address || 'No address'}</div>
+                      <div className="mt-1 text-xs uppercase tracking-wide text-slate-400">Status: {m.status}</div>
+                    </div>
                   </div>
-                  <div>
-                    <div className="font-display text-lg font-bold">{m.name}</div>
-                    <div className="text-sm text-slate-500">{m.address || 'No address'}</div>
-                    <div className="mt-1 text-xs uppercase tracking-wide text-slate-400">Status: {m.status}</div>
-                  </div>
+                  <button
+                    type="button"
+                    disabled={isActive || switchingId === m.id}
+                    onClick={() => activate(m.id, m.name)}
+                    className="ss-btn ss-btn-primary disabled:opacity-50"
+                  >
+                    {isActive ? 'Active' : switchingId === m.id ? 'Switching…' : 'Manage this store'}
+                  </button>
+                </div>
+                <div className="mt-4 space-y-2">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Branches · entrance QR</p>
+                  {(m.branches || []).map((b) => (
+                    <div
+                      key={b.id}
+                      className="flex flex-col gap-2 rounded-xl border border-slate-100 bg-slate-50 px-3 py-3 sm:flex-row sm:items-center sm:justify-between"
+                    >
+                      <span>
+                        <span className="font-medium">{b.name}</span>
+                        <span className="mt-0.5 block text-xs text-slate-400">{b.code}</span>
+                      </span>
+                      <button type="button" onClick={() => showBranchQr(b.id)} className="ss-btn ss-btn-ghost">
+                        <QrCode className="h-4 w-4" /> View QR
+                      </button>
+                    </div>
+                  ))}
+                  {!m.branches?.length && <p className="text-sm text-slate-400">No branches yet</p>}
                 </div>
               </div>
-              <div className="mt-4 space-y-2">
-                <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Branches</p>
-                {(m.branches || []).map((b) => (
-                  <div
-                    key={b.id}
-                    className="flex flex-col gap-2 rounded-xl border border-slate-100 bg-slate-50 px-3 py-3 sm:flex-row sm:items-center sm:justify-between"
-                  >
-                    <span>
-                      <span className="font-medium">{b.name}</span>
-                      <span className="mt-0.5 block text-xs text-slate-400">{b.code}</span>
-                    </span>
-                    <button type="button" onClick={() => showBranchQr(b.id)} className="ss-btn ss-btn-ghost">
-                      <QrCode className="h-4 w-4" /> View QR
-                    </button>
-                  </div>
-                ))}
-                {!m.branches?.length && <p className="text-sm text-slate-400">No branches yet</p>}
-              </div>
-            </div>
-          ))}
+            );
+          })}
           {!markets.length && (
             <div className="p-8 text-center text-slate-400">No supermarket yet. Create one to get an entrance QR.</div>
           )}
@@ -818,7 +951,7 @@ export function ManagerSupermarket() {
               <h4 className="font-display text-lg font-bold">
                 {created.supermarket?.name || 'Supermarket'} · {created.branch?.name}
               </h4>
-              <p className="text-sm text-slate-600">Place this QR at the branch entrance.</p>
+              <p className="text-sm text-slate-600">Place this QR at the branch entrance. Customers must scan it before buying.</p>
               <p className="mt-1 break-all font-mono text-xs text-slate-500">{created.qrPayload}</p>
             </div>
             <div className="flex flex-col items-center gap-3 sm:flex-row sm:items-end">

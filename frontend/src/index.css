@@ -120,6 +120,41 @@ body {
 .ss-btn-ghost { background: #f1f5f9; color: #0f172a; }
 .ss-btn-ghost:hover:not(:disabled) { background: #e2e8f0; }
 
+.ss-icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2rem;
+  height: 2rem;
+  border-radius: 0.55rem;
+  border: none;
+  cursor: pointer;
+  transition: transform 0.12s ease, background 0.15s ease, opacity 0.15s ease;
+  flex-shrink: 0;
+}
+.ss-icon-btn:hover:not(:disabled) { transform: translateY(-1px); }
+.ss-icon-btn:disabled { opacity: 0.45; cursor: not-allowed; }
+.ss-icon-btn svg { width: 0.95rem; height: 0.95rem; }
+.ss-icon-edit { background: #e0f2fe; color: #0369a1; }
+.ss-icon-edit:hover:not(:disabled) { background: #bae6fd; }
+.ss-icon-ok { background: #dcfce7; color: #15803d; }
+.ss-icon-ok:hover:not(:disabled) { background: #bbf7d0; }
+.ss-icon-pause { background: #ffedd5; color: #c2410c; }
+.ss-icon-pause:hover:not(:disabled) { background: #fed7aa; }
+.ss-icon-play { background: #d1fae5; color: #047857; }
+.ss-icon-play:hover:not(:disabled) { background: #a7f3d0; }
+.ss-icon-danger { background: #fee2e2; color: #b91c1c; }
+.ss-icon-danger:hover:not(:disabled) { background: #fecaca; }
+.ss-icon-muted { background: #f1f5f9; color: #475569; }
+.ss-icon-muted:hover:not(:disabled) { background: #e2e8f0; }
+.ss-actions {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.35rem;
+  flex-wrap: nowrap;
+}
+
 .table-wrap {
   width: 100%;
   overflow-x: auto;

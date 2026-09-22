@@ -403,93 +403,160 @@ exports.reviewPinRequest = async (req, res) => {
 exports.systemReport = async (req, res) => {
   try {
     const role = req.user.role;
-    const supermarketId = req.user.supermarketId;
     const generatedAt = new Date().toISOString();
+    const { from, to, period, supermarketId: queryMarketId } = req.query;
+
+    const range = resolveReportRange({ from, to, period });
+    const fromIso = range.from.toISOString();
+    const toIso = range.to.toISOString();
+
+    const countBetween = async (table, dateCol, filters = {}) => {
+      let q = supabase
+        .from(table)
+        .select('*', { count: 'exact', head: true })
+        .gte(dateCol, fromIso)
+        .lte(dateCol, toIso);
+      Object.entries(filters).forEach(([k, v]) => {
+        if (v !== undefined && v !== null && v !== '') q = q.eq(k, v);
+      });
+      const { count, error } = await q;
+      if (error) throw error;
+      return count || 0;
+    };
 
     if (role === 'ADMIN') {
-      const countOf = async (table, filters = {}) => {
-        let q = supabase.from(table).select('*', { count: 'exact', head: true });
-        Object.entries(filters).forEach(([k, v]) => {
-          q = q.eq(k, v);
-        });
-        const { count } = await q;
-        return count || 0;
-      };
+      const marketFilter = queryMarketId || null;
+
+      let paymentsQuery = supabase
+        .from('payments')
+        .select(
+          'id, payment_code, amount, status, paid_at, users!payments_customer_id_fkey(full_name, email), shopping_sessions(session_code, supermarket_id, supermarkets(name))'
+        )
+        .eq('status', 'COMPLETED')
+        .gte('paid_at', fromIso)
+        .lte('paid_at', toIso)
+        .order('paid_at', { ascending: false })
+        .limit(200);
+
+      let sessionsQuery = supabase
+        .from('shopping_sessions')
+        .select(
+          'id, session_code, status, payment_status, total_amount, started_at, supermarket_id, users!shopping_sessions_customer_id_fkey(full_name, email), supermarkets(name), branches(name)'
+        )
+        .gte('started_at', fromIso)
+        .lte('started_at', toIso)
+        .order('started_at', { ascending: false })
+        .limit(200);
+
+      let productsQuery = supabase
+        .from('products')
+        .select('id, name, product_code, price, quantity_available, status, created_at, supermarket_id, supermarkets(name)')
+        .gte('created_at', fromIso)
+        .lte('created_at', toIso)
+        .order('created_at', { ascending: false })
+        .limit(200);
+
+      if (marketFilter) {
+        paymentsQuery = paymentsQuery.eq('shopping_sessions.supermarket_id', marketFilter);
+        // PostgREST filter on nested may need inner join — fetch then filter if needed
+        sessionsQuery = sessionsQuery.eq('supermarket_id', marketFilter);
+        productsQuery = productsQuery.eq('supermarket_id', marketFilter);
+      }
 
       const [
-        users,
-        pendingUsers,
-        supermarkets,
-        products,
-        sessions,
-        activeSessions,
-        payments,
-        receipts,
-        devices,
-        cards,
-        deposits,
+        { data: paymentRows, error: payErr },
+        { data: sessionRows, error: sessErr },
+        { data: productRows, error: prodErr },
+        { count: usersCount },
+        { count: pendingUsers },
+        { count: marketsCount },
+        { count: allProducts },
+        { count: activeSessions },
+        { count: receiptsCount },
+        { data: markets },
       ] = await Promise.all([
-        countOf('users'),
-        countOf('users', { account_status: 'PENDING_APPROVAL' }),
-        countOf('supermarkets'),
-        countOf('products'),
-        countOf('shopping_sessions'),
-        countOf('shopping_sessions', { status: 'ACTIVE' }),
-        countOf('payments'),
-        countOf('receipts'),
-        countOf('iot_devices'),
-        countOf('customer_cards'),
-        supabase
-          .from('card_transactions')
-          .select('amount, type')
-          .eq('type', 'DEPOSIT')
-          .limit(5000)
-          .then(({ data }) => data || []),
+        paymentsQuery,
+        sessionsQuery,
+        productsQuery,
+        supabase.from('users').select('*', { count: 'exact', head: true }),
+        supabase.from('users').select('*', { count: 'exact', head: true }).eq('account_status', 'PENDING_APPROVAL'),
+        supabase.from('supermarkets').select('*', { count: 'exact', head: true }),
+        marketFilter
+          ? supabase.from('products').select('*', { count: 'exact', head: true }).eq('supermarket_id', marketFilter)
+          : supabase.from('products').select('*', { count: 'exact', head: true }),
+        marketFilter
+          ? supabase
+              .from('shopping_sessions')
+              .select('*', { count: 'exact', head: true })
+              .eq('status', 'ACTIVE')
+              .eq('supermarket_id', marketFilter)
+          : supabase.from('shopping_sessions').select('*', { count: 'exact', head: true }).eq('status', 'ACTIVE'),
+        marketFilter
+          ? supabase
+              .from('receipts')
+              .select('*', { count: 'exact', head: true })
+              .eq('supermarket_id', marketFilter)
+              .gte('created_at', fromIso)
+              .lte('created_at', toIso)
+          : supabase
+              .from('receipts')
+              .select('*', { count: 'exact', head: true })
+              .gte('created_at', fromIso)
+              .lte('created_at', toIso),
+        supabase.from('supermarkets').select('id, name, status, address').order('name').limit(100),
       ]);
 
-      const { data: paymentRows } = await supabase
-        .from('payments')
-        .select('amount, status, paid_at, payment_code, users!payments_customer_id_fkey(full_name, email)')
-        .eq('status', 'COMPLETED')
-        .order('paid_at', { ascending: false })
-        .limit(50);
+      if (payErr) throw payErr;
+      if (sessErr) throw sessErr;
+      if (prodErr) throw prodErr;
 
-      const salesTotal = (paymentRows || []).reduce((s, p) => s + Number(p.amount || 0), 0);
-      const depositTotal = (deposits || []).reduce((s, d) => s + Number(d.amount || 0), 0);
+      let payments = paymentRows || [];
+      if (marketFilter) {
+        payments = payments.filter((p) => p.shopping_sessions?.supermarket_id === marketFilter);
+      }
 
-      const { data: markets } = await supabase
-        .from('supermarkets')
-        .select('id, name, status, address, created_at')
-        .order('created_at', { ascending: false })
-        .limit(30);
+      const salesTotal = payments.reduce((s, p) => s + Number(p.amount || 0), 0);
+      const selectedMarket = marketFilter
+        ? (markets || []).find((m) => m.id === marketFilter) || null
+        : null;
 
       return res.json({
         success: true,
         data: {
           scope: 'SYSTEM',
-          title: 'SMARTSCAN System Report',
+          title: selectedMarket
+            ? `SMARTSCAN Admin Report — ${selectedMarket.name}`
+            : 'SMARTSCAN System Report',
           generatedAt,
-          summary: {
-            users,
-            pendingUsers,
-            supermarkets,
-            products,
-            sessions,
-            activeSessions,
-            payments,
-            receipts,
-            devices,
-            cards,
-            salesTotal,
-            depositTotal,
+          range: {
+            from: fromIso,
+            to: toIso,
+            period: range.period,
+            label: range.label,
           },
-          recentPayments: paymentRows || [],
+          supermarket: selectedMarket,
+          summary: {
+            users: usersCount || 0,
+            pendingUsers: pendingUsers || 0,
+            supermarkets: marketsCount || 0,
+            products: allProducts || 0,
+            productsAddedInRange: (productRows || []).length,
+            sessions: (sessionRows || []).length,
+            activeSessions: activeSessions || 0,
+            payments: payments.length,
+            receipts: receiptsCount || 0,
+            salesTotal,
+          },
+          recentPayments: payments,
+          recentSessions: sessionRows || [],
+          recentProducts: productRows || [],
           supermarketsList: markets || [],
         },
       });
     }
 
     if (role === 'MANAGER') {
+      const supermarketId = req.user.supermarketId;
       if (!supermarketId) {
         return res.status(400).json({ success: false, message: 'Manager has no supermarket assigned' });
       }
@@ -511,34 +578,45 @@ exports.systemReport = async (req, res) => {
         .eq('supermarket_id', supermarketId)
         .eq('status', 'ACTIVE');
 
-      const { count: sessions } = await supabase
-        .from('shopping_sessions')
-        .select('*', { count: 'exact', head: true })
-        .eq('supermarket_id', supermarketId);
-
-      const { data: payments } = await supabase
+      const { data: payments, error: pErr } = await supabase
         .from('payments')
         .select(
           'id, payment_code, amount, status, paid_at, users!payments_customer_id_fkey(full_name, email), shopping_sessions!inner(session_code, supermarket_id)'
         )
         .eq('shopping_sessions.supermarket_id', supermarketId)
         .eq('status', 'COMPLETED')
+        .gte('paid_at', fromIso)
+        .lte('paid_at', toIso)
         .order('paid_at', { ascending: false })
-        .limit(100);
+        .limit(200);
+      if (pErr) throw pErr;
 
       const { data: receipts } = await supabase
         .from('receipts')
-        .select('receipt_number, total_amount, status, created_at')
+        .select('id, receipt_number, total_amount, status, created_at')
         .eq('supermarket_id', supermarketId)
+        .gte('created_at', fromIso)
+        .lte('created_at', toIso)
         .order('created_at', { ascending: false })
-        .limit(50);
+        .limit(200);
 
       const { data: storeSessions } = await supabase
         .from('shopping_sessions')
-        .select('customer_id, status, payment_status, total_amount, started_at, session_code, users!shopping_sessions_customer_id_fkey(full_name, email)')
+        .select(
+          'id, customer_id, status, payment_status, total_amount, started_at, session_code, users!shopping_sessions_customer_id_fkey(full_name, email), branches(name)'
+        )
         .eq('supermarket_id', supermarketId)
+        .gte('started_at', fromIso)
+        .lte('started_at', toIso)
         .order('started_at', { ascending: false })
-        .limit(50);
+        .limit(200);
+
+      const { data: productRows } = await supabase
+        .from('products')
+        .select('id, name, product_code, price, quantity_available, status, created_at')
+        .eq('supermarket_id', supermarketId)
+        .order('created_at', { ascending: false })
+        .limit(100);
 
       const salesTotal = (payments || []).reduce((s, p) => s + Number(p.amount || 0), 0);
       const customers = new Set((storeSessions || []).map((s) => s.customer_id).filter(Boolean)).size;
@@ -549,10 +627,16 @@ exports.systemReport = async (req, res) => {
           scope: 'SUPERMARKET',
           title: `SMARTSCAN Store Report — ${market?.name || 'Supermarket'}`,
           generatedAt,
+          range: {
+            from: fromIso,
+            to: toIso,
+            period: range.period,
+            label: range.label,
+          },
           supermarket: market,
           summary: {
             products: products || 0,
-            sessions: sessions || 0,
+            sessions: (storeSessions || []).length,
             activeSessions: activeSessions || 0,
             payments: (payments || []).length,
             receipts: (receipts || []).length,
@@ -562,6 +646,7 @@ exports.systemReport = async (req, res) => {
           recentPayments: payments || [],
           recentReceipts: receipts || [],
           recentSessions: storeSessions || [],
+          recentProducts: productRows || [],
         },
       });
     }
@@ -572,3 +657,71 @@ exports.systemReport = async (req, res) => {
     return res.status(500).json({ success: false, message: err.message });
   }
 };
+
+function resolveReportRange({ from, to, period }) {
+  const now = new Date();
+  const end = to ? endOfDay(new Date(to)) : endOfDay(now);
+  let start;
+  let resolvedPeriod = period || 'custom';
+
+  if (from) {
+    start = startOfDay(new Date(from));
+    resolvedPeriod = period || 'custom';
+  } else if (period === 'daily') {
+    start = startOfDay(now);
+  } else if (period === 'weekly') {
+    start = startOfDay(new Date(now.getTime() - 6 * 24 * 60 * 60 * 1000));
+  } else if (period === 'yearly') {
+    start = startOfDay(new Date(now.getFullYear(), 0, 1));
+  } else {
+    // monthly default
+    resolvedPeriod = period || 'monthly';
+    start = startOfDay(new Date(now.getFullYear(), now.getMonth(), 1));
+  }
+
+  if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) {
+    const fallbackStart = startOfDay(new Date(now.getFullYear(), now.getMonth(), 1));
+    return {
+      from: fallbackStart,
+      to: endOfDay(now),
+      period: 'monthly',
+      label: formatRangeLabel(fallbackStart, endOfDay(now), 'monthly'),
+    };
+  }
+
+  if (start > end) {
+    return {
+      from: startOfDay(end),
+      to: endOfDay(start),
+      period: resolvedPeriod,
+      label: formatRangeLabel(startOfDay(end), endOfDay(start), resolvedPeriod),
+    };
+  }
+
+  return {
+    from: start,
+    to: end,
+    period: resolvedPeriod,
+    label: formatRangeLabel(start, end, resolvedPeriod),
+  };
+}
+
+function startOfDay(d) {
+  const x = new Date(d);
+  x.setHours(0, 0, 0, 0);
+  return x;
+}
+
+function endOfDay(d) {
+  const x = new Date(d);
+  x.setHours(23, 59, 59, 999);
+  return x;
+}
+
+function formatRangeLabel(from, to, period) {
+  const opts = { year: 'numeric', month: 'short', day: 'numeric' };
+  const a = from.toLocaleDateString(undefined, opts);
+  const b = to.toLocaleDateString(undefined, opts);
+  const p = period ? String(period).toUpperCase() : 'CUSTOM';
+  return `${p}: ${a} → ${b}`;
+}

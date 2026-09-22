@@ -16,6 +16,7 @@ const router = express.Router();
 router.get('/public', ctrl.publicList);
 router.get('/', requireAuth, ctrl.listSupermarkets);
 router.post('/', requireAuth, requireRole('ADMIN', 'MANAGER', 'CUSTOMER'), upload.single('logo'), ctrl.createSupermarket);
+router.post('/:id/activate', requireAuth, requireRole('ADMIN', 'MANAGER'), ctrl.switchActiveSupermarket);
 router.post('/branches', requireAuth, requireRole('ADMIN', 'MANAGER'), ctrl.addBranch);
 router.get('/branches/:id/qrcode', requireAuth, ctrl.getBranchQr);
 

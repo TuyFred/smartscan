@@ -4,10 +4,30 @@ const { generateCode, money } = require('../utils/security');
 
 async function ensureMarketAccess(user, supermarketId) {
   if (user.role === 'ADMIN') return true;
-  if (user.role === 'MANAGER' || user.role === 'CASHIER') {
+  if (!supermarketId) return false;
+  if (user.role === 'CASHIER') {
     return user.supermarketId === supermarketId;
   }
+  if (user.role === 'MANAGER') {
+    if (user.supermarketId === supermarketId) return true;
+    const { data } = await supabase
+      .from('supermarkets')
+      .select('id')
+      .eq('id', supermarketId)
+      .eq('owner_id', user.id)
+      .maybeSingle();
+    return Boolean(data);
+  }
   return false;
+}
+
+async function loadProductForStaff(req, productId) {
+  const { data: product, error } = await supabase.from('products').select('*').eq('id', productId).single();
+  if (error || !product) return { error: { status: 404, message: 'Product not found' } };
+  if (!(await ensureMarketAccess(req.user, product.supermarket_id))) {
+    return { error: { status: 403, message: 'Not allowed to manage this product' } };
+  }
+  return { product };
 }
 
 exports.listProducts = async (req, res) => {
@@ -44,6 +64,12 @@ exports.createProduct = async (req, res) => {
     } = req.body;
 
     const marketId = supermarketId || req.user.supermarketId;
+    if (req.user.role === 'ADMIN' && !supermarketId) {
+      return res.status(400).json({
+        success: false,
+        message: 'Select which supermarket this product belongs to',
+      });
+    }
     if (!name || price === undefined || !marketId) {
       return res.status(400).json({ success: false, message: 'name, price, supermarketId required' });
     }
@@ -88,6 +114,9 @@ exports.createProduct = async (req, res) => {
 
 exports.updateProduct = async (req, res) => {
   try {
+    const loaded = await loadProductForStaff(req, req.params.id);
+    if (loaded.error) return res.status(loaded.error.status).json({ success: false, message: loaded.error.message });
+
     const updates = {};
     const map = {
       name: 'name',
@@ -107,6 +136,9 @@ exports.updateProduct = async (req, res) => {
       }
     });
     if (req.file) updates.image = `/uploads/${req.file.filename}`;
+    if (!Object.keys(updates).length) {
+      return res.status(400).json({ success: false, message: 'No fields to update' });
+    }
 
     const { data, error } = await supabase
       .from('products')
@@ -122,14 +154,25 @@ exports.updateProduct = async (req, res) => {
 };
 
 exports.deleteProduct = async (req, res) => {
-  const { error } = await supabase.from('products').update({ status: 'INACTIVE' }).eq('id', req.params.id);
-  if (error) return res.status(500).json({ success: false, message: error.message });
-  return res.json({ success: true, message: 'Product deactivated' });
+  try {
+    const loaded = await loadProductForStaff(req, req.params.id);
+    if (loaded.error) return res.status(loaded.error.status).json({ success: false, message: loaded.error.message });
+    const { error } = await supabase.from('products').update({ status: 'INACTIVE' }).eq('id', req.params.id);
+    if (error) return res.status(500).json({ success: false, message: error.message });
+    return res.json({ success: true, message: 'Product deactivated' });
+  } catch (err) {
+    return res.status(500).json({ success: false, message: err.message });
+  }
 };
 
 exports.getProductQr = async (req, res) => {
-  const { data: product, error } = await supabase.from('products').select('*').eq('id', req.params.id).single();
-  if (error || !product) return res.status(404).json({ success: false, message: 'Product not found' });
-  const qrDataUrl = await QRCode.toDataURL(product.qr_payload);
-  return res.json({ success: true, data: { product, qrDataUrl, qrPayload: product.qr_payload } });
+  try {
+    const loaded = await loadProductForStaff(req, req.params.id);
+    if (loaded.error) return res.status(loaded.error.status).json({ success: false, message: loaded.error.message });
+    const product = loaded.product;
+    const qrDataUrl = await QRCode.toDataURL(product.qr_payload);
+    return res.json({ success: true, data: { product, qrDataUrl, qrPayload: product.qr_payload } });
+  } catch (err) {
+    return res.status(500).json({ success: false, message: err.message });
+  }
 };

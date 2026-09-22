@@ -118,7 +118,7 @@ export function StartShopping() {
     <div className="mx-auto max-w-xl rounded-3xl bg-white p-6 shadow-sm">
       <h2 className="font-display text-2xl font-bold">Start shopping</h2>
       <p className="mt-2 text-sm text-slate-500">
-        You must scan the supermarket / branch entrance QR before scanning any products.
+        Scan the supermarket entrance QR to open a session for that store. You can shop at any supermarket, but you must scan its QR first — product scans are blocked until then.
       </p>
       <p className="mt-2 rounded-xl bg-slate-50 px-3 py-2 font-mono text-xs text-slate-600">
         Expected format: SMARTSCAN_BRANCH:BRANCH-001
@@ -334,14 +334,29 @@ export function CurrentSession() {
 
 export function ScanProductPage() {
   const [session, setSession] = useState(null);
+  const [checking, setChecking] = useState(true);
   const navigate = useNavigate();
   useEffect(() => {
-    api.get('/sessions/active').then((r) => {
-      if (!r.data.data) navigate('/customer/start-shopping');
-      else setSession(r.data.data);
-    });
+    api
+      .get('/sessions/active')
+      .then((r) => {
+        if (!r.data.data || r.data.data.status !== 'ACTIVE') {
+          navigate('/customer/start-shopping', { replace: true });
+        } else {
+          setSession(r.data.data);
+        }
+      })
+      .catch(() => navigate('/customer/start-shopping', { replace: true }))
+      .finally(() => setChecking(false));
   }, [navigate]);
-  if (!session) return null;
+  if (checking || !session) {
+    return (
+      <div className="rounded-2xl bg-white p-6 text-center shadow-sm">
+        <p className="text-slate-500">Checking shopping session…</p>
+        <p className="mt-2 text-sm text-slate-400">You must scan a supermarket entrance QR before buying products.</p>
+      </div>
+    );
+  }
   return <SessionView allowScan />;
 }
 

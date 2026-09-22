@@ -96,7 +96,7 @@ export function AuthProvider({ children }) {
       document.removeEventListener('visibilitychange', restoreConnection);
       s.disconnect();
     };
-  }, [user?.id]);
+  }, [user?.id, user?.supermarketId]);
 
   const loginWithToken = async (token, nextUser) => {
     localStorage.setItem('smartscan_token', token);
