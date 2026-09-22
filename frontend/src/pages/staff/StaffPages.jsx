@@ -748,12 +748,26 @@ function CustomerSearch({ selected, onSelect, hint }) {
 }
 
 export function CashierSellCard() {
+  const { socket } = useAuth();
   const [selected, setSelected] = useState(null);
   const [cardUid, setCardUid] = useState('');
   const [amount, setAmount] = useState('');
   const [result, setResult] = useState(null);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [waitingTap, setWaitingTap] = useState(false);
+
+  useEffect(() => {
+    if (!socket) return undefined;
+    const onRead = (payload) => {
+      const uid = payload?.cardUid || payload?.card?.cardUid;
+      if (!uid) return;
+      setCardUid(uid);
+      setWaitingTap(false);
+    };
+    socket.on('rfid:card-read', onRead);
+    return () => socket.off('rfid:card-read', onRead);
+  }, [socket]);
 
   const sell = async (e) => {
     e.preventDefault();
@@ -780,7 +794,7 @@ export function CashierSellCard() {
       <div>
         <h2 className="font-display text-xl font-bold">Sell RFID card</h2>
         <p className="text-sm text-slate-500">
-          Find a registered customer, assign the physical card UID, and optionally load cash onto it.
+          Find a registered customer, tap the physical card (or type the UID), and optionally load cash onto it.
         </p>
       </div>
       <CustomerSearch selected={selected} onSelect={setSelected} hint="The customer must already have a SMARTSCAN account." />
@@ -790,14 +804,28 @@ export function CashierSellCard() {
           {error && <div className="rounded-xl bg-red-50 px-3 py-2 text-sm text-red-700">{error}</div>}
           <label className="block text-sm font-medium">
             Physical RFID card UID
-            <input
-              required
-              value={cardUid}
-              onChange={(e) => setCardUid(e.target.value)}
-              placeholder="e.g. A4B2C199"
-              className="mt-1 w-full rounded-xl border px-3 py-2"
-            />
+            <div className="mt-1 flex gap-2">
+              <input
+                required
+                value={cardUid}
+                onChange={(e) => setCardUid(e.target.value)}
+                placeholder="Tap card or type UID"
+                className="w-full rounded-xl border px-3 py-2"
+              />
+              <button
+                type="button"
+                onClick={() => { setWaitingTap(true); setCardUid(''); }}
+                className="shrink-0 rounded-xl bg-slate-900 px-3 py-2 text-sm font-semibold text-white"
+              >
+                {waitingTap ? 'Waiting…' : 'Tap card'}
+              </button>
+            </div>
           </label>
+          {waitingTap && (
+            <div className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+              Tap the blank RFID card on the reader now. The UID will fill in automatically.
+            </div>
+          )}
           <label className="block text-sm font-medium">
             Starting balance (RWF)
             <input
@@ -824,18 +852,33 @@ export function CashierSellCard() {
 }
 
 export function CashierDeposits() {
+  const { socket } = useAuth();
   const [selected, setSelected] = useState(null);
   const [cardUid, setCardUid] = useState('');
   const [amount, setAmount] = useState('');
   const [result, setResult] = useState(null);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [waitingTap, setWaitingTap] = useState(false);
+
+  useEffect(() => {
+    if (!socket) return undefined;
+    const onRead = (payload) => {
+      const uid = payload?.cardUid || payload?.card?.cardUid;
+      if (!uid) return;
+      setCardUid(uid);
+      setWaitingTap(false);
+      if (payload?.customer) setSelected(payload.customer);
+    };
+    socket.on('rfid:card-read', onRead);
+    return () => socket.off('rfid:card-read', onRead);
+  }, [socket]);
 
   const deposit = async (e) => {
     e.preventDefault();
     setError('');
     if (!selected && !cardUid) {
-      setError('Search a customer or enter a card UID');
+      setError('Search a customer or tap/enter a card UID');
       return;
     }
     setLoading(true);
@@ -866,13 +909,27 @@ export function CashierDeposits() {
         {error && <div className="rounded-xl bg-red-50 px-3 py-2 text-sm text-red-700">{error}</div>}
         <label className="block text-sm font-medium">
           Card UID (optional if a customer is selected)
-          <input
-            value={cardUid}
-            onChange={(e) => setCardUid(e.target.value)}
-            placeholder="Tap or type RFID UID"
-            className="mt-1 w-full rounded-xl border px-3 py-2"
-          />
+          <div className="mt-1 flex gap-2">
+            <input
+              value={cardUid}
+              onChange={(e) => setCardUid(e.target.value)}
+              placeholder="Tap or type RFID UID"
+              className="w-full rounded-xl border px-3 py-2"
+            />
+            <button
+              type="button"
+              onClick={() => { setWaitingTap(true); setCardUid(''); }}
+              className="shrink-0 rounded-xl bg-slate-900 px-3 py-2 text-sm font-semibold text-white"
+            >
+              {waitingTap ? 'Waiting…' : 'Tap card'}
+            </button>
+          </div>
         </label>
+        {waitingTap && (
+          <div className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+            Tap the customer card on the reader. UID and customer details will appear here.
+          </div>
+        )}
         <label className="block text-sm font-medium">
           Amount (RWF)
           <input
@@ -979,25 +1036,28 @@ export function CashierRfid() {
   const [uid, setUid] = useState('');
   const [data, setData] = useState(null);
   const [error, setError] = useState('');
-  const [waiting, setWaiting] = useState(false);
+  const [waiting, setWaiting] = useState(true);
+  const [loading, setLoading] = useState(false);
 
   useEffect(() => {
     if (!socket) return undefined;
 
     const handleCardRead = (payload) => {
-      if (!payload?.cardUid) return;
-      setUid(payload.cardUid);
+      const cardUid = payload?.cardUid || payload?.card?.cardUid;
+      if (!cardUid) return;
+      setUid(cardUid);
       setError('');
       setWaiting(false);
       setData({
         customer: payload.customer || null,
         card: {
-          cardUid: payload.cardUid,
-          balance: payload.cardBalance || 0,
-          status: payload.status || 'ACTIVE',
+          cardUid,
+          balance: payload.cardBalance ?? payload.card?.balance ?? 0,
+          status: payload.status || payload.card?.status || 'ACTIVE',
         },
         activeSession: payload.activeSession || null,
         amountDue: payload.amountDue || 0,
+        authorizationId: payload.authorizationId || null,
       });
     };
 
@@ -1012,12 +1072,40 @@ export function CashierRfid() {
     setUid('');
   };
 
+  const lookupManual = async (e) => {
+    e?.preventDefault();
+    if (!uid.trim()) return;
+    setLoading(true);
+    setError('');
+    try {
+      const { data: res } = await api.post('/rfid/read-staff', { cardUid: uid.trim() });
+      const payload = res.data;
+      setData({
+        customer: payload.customer || null,
+        card: {
+          cardUid: payload.card?.cardUid || uid,
+          balance: payload.cardBalance ?? payload.card?.balance ?? 0,
+          status: payload.card?.status || 'ACTIVE',
+        },
+        activeSession: payload.activeSession || null,
+        amountDue: payload.amountDue || 0,
+        authorizationId: payload.authorizationId || null,
+      });
+      setWaiting(false);
+    } catch (err) {
+      setError(err.response?.data?.message || 'Card lookup failed');
+      setData(null);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   return (
     <div className="mx-auto max-w-lg space-y-4">
       <div className="rounded-2xl bg-white p-5 shadow-sm">
         <h3 className="font-display text-xl font-bold">RFID card lookup</h3>
         <p className="mt-1 text-sm text-slate-500">
-          Click below, then tap the customer card. The card ID will appear automatically when the reader sends it.
+          Tap a card on the SMARTSCAN reader — this page updates live. You can also type a UID and look it up.
         </p>
       </div>
 
@@ -1028,14 +1116,25 @@ export function CashierRfid() {
           className="w-full rounded-xl bg-slate-900 py-2.5 font-semibold text-white disabled:opacity-60"
           disabled={waiting}
         >
-          {waiting ? 'Waiting for tap…' : 'Read card'}
+          {waiting ? 'Listening for card tap…' : 'Start listening for tap'}
         </button>
+        <form onSubmit={lookupManual} className="flex gap-2">
+          <input
+            value={uid}
+            onChange={(e) => setUid(e.target.value)}
+            placeholder="Or type card UID"
+            className="w-full rounded-xl border px-3 py-2"
+          />
+          <button type="submit" disabled={loading} className="rounded-xl bg-teal-600 px-4 py-2 font-semibold text-white">
+            {loading ? '…' : 'Lookup'}
+          </button>
+        </form>
       </div>
 
       {waiting && (
         <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
-          <div className="font-semibold">Tap your card now</div>
-          <div className="mt-1">Please tap the customer card on the reader. The card ID will appear here automatically.</div>
+          <div className="font-semibold">Tap a card now</div>
+          <div className="mt-1">Keep this page open. When the ESP reader sends the UID over MQTT, customer details appear here.</div>
           {uid && <div className="mt-2 rounded-xl bg-white px-3 py-2 font-mono text-xs">Current card ID: {uid}</div>}
         </div>
       )}
@@ -1050,7 +1149,9 @@ export function CashierRfid() {
           <div>Active session: {data.activeSession?.session_code || 'None'}</div>
           <div>Amount due: {formatRwf(data.amountDue)}</div>
           <div>Status: {data.card?.status || 'ACTIVE'}</div>
-          <p className="pt-2 text-xs text-amber-700">Deduction only happens after customer PIN authorization.</p>
+          <p className="pt-2 text-xs text-amber-700">
+            Money is deducted only after the customer enters their approved payment PIN on their phone.
+          </p>
         </div>
       )}
     </div>

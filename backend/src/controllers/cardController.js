@@ -2,9 +2,50 @@ const { supabase } = require('../config/supabase');
 const { money, generateCode, comparePassword, hashPassword } = require('../utils/security');
 const { writeAudit } = require('../services/auditService');
 const { getSessionFull, recalculateSession } = require('./sessionController');
+const { publishRfidCommand } = require('../services/mqttClient');
 
 function normalizeCardUid(value) {
-  return String(value ?? '').trim().replace(/:/g, '').toUpperCase();
+  return String(value ?? '')
+    .trim()
+    .replace(/[:\-\s]/g, '')
+    .toUpperCase();
+}
+
+async function findCardByUid(cardUid) {
+  const normalized = normalizeCardUid(cardUid);
+  if (!normalized) return null;
+
+  const { data: exact } = await supabase
+    .from('customer_cards')
+    .select('*, users!customer_cards_customer_id_fkey(id, full_name, email, phone, profile_image)')
+    .eq('card_uid', normalized)
+    .maybeSingle();
+  if (exact) return exact;
+
+  // Legacy rows may still store colon-separated UIDs
+  const { data: rows } = await supabase
+    .from('customer_cards')
+    .select('*, users!customer_cards_customer_id_fkey(id, full_name, email, phone, profile_image)')
+    .limit(500);
+  return (rows || []).find((row) => normalizeCardUid(row.card_uid) === normalized) || null;
+}
+
+function emitRfidCardRead(io, req, payload) {
+  if (!io) return;
+  const supermarketId = req.user?.supermarketId || req.device?.supermarket_id || null;
+  // Always include flat fields cashiers expect
+  const event = {
+    ...payload,
+    cardUid: payload.cardUid || payload.card?.cardUid,
+    cardBalance: payload.cardBalance ?? payload.card?.balance ?? 0,
+    status: payload.status || payload.card?.status || 'ACTIVE',
+  };
+
+  if (supermarketId) {
+    io.to(`supermarket:${supermarketId}`).emit('rfid:card-read', event);
+  }
+  // Also broadcast so hosted cashier dashboards still update even if room join mismatches
+  io.emit('rfid:card-read', event);
 }
 
 exports.getMyCard = async (req, res) => {
@@ -339,23 +380,47 @@ exports.listStoreCustomers = async (req, res) => {
   }
 };
 
-// RFID tap — identify only, NEVER deduct
+// RFID tap — identify only, NEVER deduct (deduct happens after customer PIN)
 exports.rfidRead = async (req, res) => {
   try {
     const rawCardUid = req.body?.cardUid;
     if (!rawCardUid) return res.status(400).json({ success: false, message: 'cardUid required' });
 
     const cardUid = normalizeCardUid(rawCardUid);
+    const card = await findCardByUid(cardUid);
+    const io = req.app.get('io');
 
-    const { data: card } = await supabase
-      .from('customer_cards')
-      .select('*, users!customer_cards_customer_id_fkey(id, full_name, email, phone, profile_image)')
-      .eq('card_uid', cardUid)
-      .maybeSingle();
-
-    if (!card) return res.status(404).json({ success: false, message: 'Unknown RFID card' });
+    if (!card) {
+      publishRfidCommand('NOT_REGISTERED');
+      // Still broadcast UID so cashiers can sell/issue this physical card
+      emitRfidCardRead(io, req, {
+        cardUid,
+        customer: null,
+        card: null,
+        cardBalance: 0,
+        amountDue: 0,
+        activeSession: null,
+        authorizationId: null,
+        status: 'UNKNOWN',
+      });
+      return res.status(404).json({
+        success: false,
+        message: 'Unknown RFID card',
+        data: { cardUid, status: 'UNKNOWN' },
+      });
+    }
     if (card.status !== 'ACTIVE') {
+      publishRfidCommand('PAYMENT_DENIED');
       return res.status(400).json({ success: false, message: `Card status: ${card.status}` });
+    }
+
+    // Keep stored UID normalized going forward
+    if (normalizeCardUid(card.card_uid) !== card.card_uid) {
+      await supabase
+        .from('customer_cards')
+        .update({ card_uid: normalizeCardUid(card.card_uid), updated_at: new Date().toISOString() })
+        .eq('id', card.id);
+      card.card_uid = normalizeCardUid(card.card_uid);
     }
 
     const { data: sessionRow } = await supabase
@@ -375,6 +440,13 @@ exports.rfidRead = async (req, res) => {
 
     let authorization = null;
     if (session && amountDue > 0) {
+      // Expire older pending auths for this session so only the latest tap is valid
+      await supabase
+        .from('payment_authorizations')
+        .update({ status: 'EXPIRED' })
+        .eq('session_id', session.id)
+        .eq('status', 'PENDING');
+
       const expiresAt = new Date(Date.now() + 5 * 60 * 1000).toISOString();
       const { data: auth } = await supabase
         .from('payment_authorizations')
@@ -390,7 +462,6 @@ exports.rfidRead = async (req, res) => {
         .single();
       authorization = auth;
 
-      const io = req.app.get('io');
       if (io) {
         io.to(`user:${card.customer_id}`).emit('payment:request', {
           authorizationId: auth.id,
@@ -401,6 +472,11 @@ exports.rfidRead = async (req, res) => {
           cardUid: card.card_uid,
         });
       }
+      publishRfidCommand('PAYMENT_ALLOWED');
+    } else if (!session) {
+      publishRfidCommand('NO_SESSION');
+    } else {
+      publishRfidCommand('READY');
     }
 
     const responseData = {
@@ -409,32 +485,25 @@ exports.rfidRead = async (req, res) => {
       activeSession: session,
       amountDue,
       authorizationId: authorization?.id || null,
+      cardBalance: money(card.balance),
+      cardUid: card.card_uid,
+      status: card.status,
     };
 
-    const io = req.app.get('io');
-    const supermarketId = req.user?.supermarketId || req.device?.supermarket_id;
-    if (io) {
-      const payload = {
-        ...responseData,
-        cardUid: card.card_uid,
-        customer: card.users,
-        status: card.status,
-      };
-
-      if (supermarketId) {
-        io.to(`supermarket:${supermarketId}`).emit('rfid:card-read', payload);
-      } else {
-        io.emit('rfid:card-read', payload);
-      }
-    }
+    emitRfidCardRead(io, req, responseData);
 
     return res.json({
       success: true,
-      message: 'RFID card detected. Awaiting customer PIN authorization.',
+      message: authorization
+        ? 'RFID card detected. Customer must enter payment PIN to finish and deduct money.'
+        : session
+          ? 'RFID card detected. Cart total is zero.'
+          : 'RFID card detected. No active shopping session.',
       data: responseData,
     });
   } catch (err) {
     console.error(err);
+    publishRfidCommand('PAYMENT_DENIED');
     return res.status(500).json({ success: false, message: err.message });
   }
 };
@@ -473,6 +542,7 @@ exports.authorizePayment = async (req, res) => {
     }
     const pinOk = await comparePassword(String(pin), user.payment_pin_hash);
     if (!pinOk) {
+      publishRfidCommand('WRONG_PIN');
       return res.status(401).json({
         success: false,
         message: 'Incorrect PIN. Payment was not completed. Money was NOT removed.',
@@ -483,9 +553,11 @@ exports.authorizePayment = async (req, res) => {
     const { total } = await recalculateSession(auth.session_id);
     const session = await getSessionFull(auth.session_id);
     if (session.status !== 'ACTIVE' || session.payment_status === 'PAID') {
+      publishRfidCommand('PAYMENT_DENIED');
       return res.status(400).json({ success: false, message: 'Session already paid or inactive' });
     }
     if (!session.cart_items?.length) {
+      publishRfidCommand('PAYMENT_DENIED');
       return res.status(400).json({ success: false, message: 'Cart is empty' });
     }
 
@@ -494,6 +566,7 @@ exports.authorizePayment = async (req, res) => {
     const amount = money(total);
 
     if (balance < amount) {
+      publishRfidCommand('INSUFFICIENT_BALANCE');
       return res.status(400).json({
         success: false,
         code: 'INSUFFICIENT_BALANCE',
@@ -637,8 +710,12 @@ exports.authorizePayment = async (req, res) => {
     const io = req.app.get('io');
     if (io) {
       io.to(`user:${user.id}`).emit('payment:success', result);
+      io.to(`user:${user.id}`).emit('card:updated', paidCard);
       io.to(`supermarket:${session.supermarket_id}`).emit('session:paid', { sessionId: session.id, ...result });
+      io.emit('session:paid', { sessionId: session.id, ...result });
     }
+
+    publishRfidCommand('PAYMENT_SUCCESS');
 
     await writeAudit({
       userId: user.id,
@@ -651,11 +728,12 @@ exports.authorizePayment = async (req, res) => {
 
     return res.json({
       success: true,
-      message: 'PAYMENT SUCCESSFUL',
+      message: 'PAYMENT SUCCESSFUL — money removed from card',
       data: result,
     });
   } catch (err) {
     console.error(err);
+    publishRfidCommand('PAYMENT_DENIED');
     return res.status(500).json({ success: false, message: err.message || 'Payment failed' });
   }
 };
@@ -666,6 +744,7 @@ exports.cancelAuthorization = async (req, res) => {
     .update({ status: 'CANCELLED' })
     .eq('id', req.params.id)
     .eq('customer_id', req.user.id);
+  publishRfidCommand('PAYMENT_CANCELLED');
   return res.json({ success: true, message: 'Payment cancelled' });
 };
 

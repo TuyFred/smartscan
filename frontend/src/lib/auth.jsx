@@ -79,6 +79,8 @@ export function AuthProvider({ children }) {
 
     s.on('connect', joinUserRoom);
     joinUserRoom();
+    // Re-join rooms after reconnect so cashier RFID events keep arriving on hosted apps
+    s.io.on('reconnect', joinUserRoom);
     s.on('payment:request', (payload) => triggerPaymentRequest(payload));
     s.on('payment:success', () => setPaymentRequest(null));
     s.on('card:updated', () => {});

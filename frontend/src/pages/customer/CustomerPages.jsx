@@ -138,41 +138,46 @@ export function StartShopping() {
 }
 
 function SessionView({ allowScan }) {
-  const { triggerPaymentRequest, user, socket } = useAuth();
+  const { user, socket } = useAuth();
   const [session, setSession] = useState(null);
   const [scanner, setScanner] = useState(false);
-  const [paymentHelp, setPaymentHelp] = useState(false);
-  const [checkoutStep, setCheckoutStep] = useState('pin');
-  const [pinInput, setPinInput] = useState('');
+  const [waitingPay, setWaitingPay] = useState(false);
   const [error, setError] = useState('');
   const navigate = useNavigate();
 
   const load = async () => {
     const { data } = await api.get('/sessions/active');
     setSession(data.data);
+    if (!data.data || data.data.payment_status === 'PAID') {
+      setWaitingPay(false);
+    }
   };
 
   useEffect(() => {
     load().catch(() => {});
   }, []);
 
-  useEffect(() => {    const onRefresh = () => loadStats();
-    window.addEventListener('smartscan:payment-success', onRefresh);
-    return () => window.removeEventListener('smartscan:payment-success', onRefresh);
-  }, []);
-
-  useEffect(() => {    const onRefresh = () => load();
+  useEffect(() => {
+    const onRefresh = () => {
+      setWaitingPay(false);
+      load();
+    };
     window.addEventListener('smartscan:payment-success', onRefresh);
     return () => window.removeEventListener('smartscan:payment-success', onRefresh);
   }, []);
 
   useEffect(() => {
     if (!socket) return undefined;
-    const handlers = ['payment:success', 'session:paid', 'card:updated'];
-    const onRefresh = () => load();
-    handlers.forEach((eventName) => socket.on(eventName, onRefresh));
+    const onPayRequest = () => setWaitingPay(false);
+    const onRefresh = () => {
+      setWaitingPay(false);
+      load();
+    };
+    socket.on('payment:request', onPayRequest);
+    ['payment:success', 'session:paid', 'card:updated'].forEach((eventName) => socket.on(eventName, onRefresh));
     return () => {
-      handlers.forEach((eventName) => socket.off(eventName, onRefresh));
+      socket.off('payment:request', onPayRequest);
+      ['payment:success', 'session:paid', 'card:updated'].forEach((eventName) => socket.off(eventName, onRefresh));
     };
   }, [socket]);
 
@@ -208,6 +213,7 @@ function SessionView({ allowScan }) {
   }
 
   const items = session.cart_items || [];
+  const canPay = items.length > 0 && Number(session.total_amount) > 0;
 
   return (
     <div className="space-y-4">
@@ -279,110 +285,40 @@ function SessionView({ allowScan }) {
         </button>
         <button
           type="button"
-          onClick={() => {
-            if (import.meta.env.DEV && session?.total_amount > 0) {
-              triggerPaymentRequest({
-                authorizationId: 'local-dev-payment',
-                customer: { full_name: user?.fullName || 'Customer' },
-                session: { session_code: session?.session_code || 'LOCAL-DEV' },
-                amountToPay: Number(session?.total_amount || 0),
-                cardBalance: Number(user?.cardBalance || 0),
-                cardUid: 'LOCAL-DEV',
-              });
-              return;
-            }
-            setPaymentHelp(true);
-          }}
-          className="rounded-xl bg-slate-900 px-4 py-2.5 font-semibold text-white"
+          disabled={!canPay}
+          onClick={() => setWaitingPay(true)}
+          className="rounded-xl bg-slate-900 px-4 py-2.5 font-semibold text-white disabled:opacity-50"
         >
-          Checkout (tap RFID)
+          Pay with RFID card
         </button>
       </div>
-      {paymentHelp && (
+
+      {waitingPay && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-950/70 p-4 backdrop-blur-sm">
           <div className="w-full max-w-md rounded-3xl bg-white p-6 shadow-2xl">
             <div className="mb-4 inline-flex items-center gap-2 rounded-full bg-amber-50 px-3 py-1 text-xs font-semibold text-amber-800">
-              <CreditCard className="h-3.5 w-3.5" /> CHECKOUT PAYMENT
+              <CreditCard className="h-3.5 w-3.5" /> READY TO PAY
             </div>
-
-            <div className="mb-4 grid grid-cols-3 gap-2 text-center text-[11px] font-semibold uppercase tracking-wide text-slate-500">
-              <div className={`rounded-full px-2 py-1.5 ${checkoutStep === 'pin' ? 'bg-amber-50 text-amber-700' : 'bg-slate-100'}`}>
-                1. PIN
-              </div>
-              <div className={`rounded-full px-2 py-1.5 ${checkoutStep === 'tap' ? 'bg-teal-50 text-teal-700' : 'bg-slate-100'}`}>
-                2. Tap
-              </div>
-              <div className="rounded-full bg-slate-100 px-2 py-1.5">3. Paid</div>
+            <h3 className="font-display text-2xl font-bold text-slate-900">Tap your RFID card</h3>
+            <p className="mt-3 text-sm leading-6 text-slate-600">
+              Keep this page open. Tap your card on the SMARTSCAN reader. Then enter your payment PIN when the popup appears — money is removed only after a correct PIN.
+            </p>
+            <div className="mt-5 rounded-2xl bg-slate-50 p-4 text-sm text-slate-700">
+              <div className="flex justify-between"><span>Amount due</span><strong className="text-teal-700">{formatRwf(session.total_amount)}</strong></div>
+              <div className="mt-2 flex justify-between"><span>Customer</span><strong>{user?.fullName || 'You'}</strong></div>
+              <ul className="mt-3 list-disc space-y-1 pl-5 text-xs text-slate-500">
+                <li>1. Tap RFID card on the reader</li>
+                <li>2. Enter payment PIN on the popup</li>
+                <li>3. Balance is deducted and receipt QR is shown</li>
+              </ul>
             </div>
-
-            {checkoutStep === 'pin' ? (
-              <>
-                <h3 className="font-display text-2xl font-bold text-slate-900">Enter your payment PIN</h3>
-                <p className="mt-3 text-sm leading-6 text-slate-600">
-                  Step 1: enter your pin. Step 2: tap your RFID card. Step 3: payment is confirmed and money is removed from your card.
-                </p>
-
-                <div className="mt-5 rounded-2xl border-2 border-teal-200 bg-teal-50 p-3">
-                  <div className="mb-2 text-xs font-bold uppercase tracking-[0.18em] text-teal-700">Payment PIN</div>
-                  <input
-                    type="password"
-                    inputMode="numeric"
-                    maxLength={6}
-                    value={pinInput}
-                    onChange={(e) => setPinInput(e.target.value.replace(/\D/g, ''))}
-                    className="w-full rounded-xl border-2 border-teal-300 bg-white px-3 py-4 text-center text-2xl font-bold tracking-[0.45em] text-slate-900 outline-none focus:border-teal-500"
-                    placeholder="••••••"
-                    aria-label="Payment PIN"
-                  />
-                </div>
-
-                <div className="mt-3 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900">
-                  After PIN is accepted, tap your RFID card to confirm payment and complete the deduction.
-                </div>
-
-                <div className="mt-5 grid grid-cols-2 gap-3">
-                  <button type="button" onClick={() => { setPaymentHelp(false); setCheckoutStep('pin'); setPinInput(''); }} className="rounded-xl border border-slate-200 py-3 font-semibold text-slate-700">
-                    Close
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      if (pinInput.length < 4) return;
-                      setCheckoutStep('tap');
-                    }}
-                    disabled={pinInput.length < 4}
-                    className="rounded-xl bg-teal-600 py-3 font-semibold text-white disabled:opacity-50"
-                  >
-                    Continue
-                  </button>
-                </div>
-              </>
-            ) : (
-              <>
-                <h3 className="font-display text-2xl font-bold text-slate-900">Tap your card now</h3>
-                <p className="mt-3 text-sm leading-6 text-slate-600">
-                  Your PIN was accepted. Please tap your RFID card now. The payment will complete in a few seconds and the money will be removed from the card automatically.
-                </p>
-
-                <div className="mt-5 rounded-2xl bg-slate-50 p-4 text-sm text-slate-700">
-                  <div className="font-semibold text-slate-900">What happens next</div>
-                  <ul className="mt-2 list-disc space-y-1 pl-5">
-                    <li>Card is checked.</li>
-                    <li>Payment is verified.</li>
-                    <li>Balance is deducted and success message appears.</li>
-                  </ul>
-                </div>
-
-                <div className="mt-5 grid grid-cols-2 gap-3">
-                  <button type="button" onClick={() => { setCheckoutStep('pin'); setPinInput(''); }} className="rounded-xl border border-slate-200 py-3 font-semibold text-slate-700">
-                    Back
-                  </button>
-                  <button type="button" onClick={() => { setPaymentHelp(false); setCheckoutStep('pin'); setPinInput(''); }} className="rounded-xl bg-teal-600 py-3 font-semibold text-white">
-                    Close
-                  </button>
-                </div>
-              </>
-            )}
+            <button
+              type="button"
+              onClick={() => setWaitingPay(false)}
+              className="mt-5 w-full rounded-xl border border-slate-200 py-3 font-semibold text-slate-700"
+            >
+              Cancel
+            </button>
           </div>
         </div>
       )}

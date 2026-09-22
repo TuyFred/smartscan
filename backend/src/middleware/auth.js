@@ -79,8 +79,18 @@ async function requireDeviceAuth(req, res, next) {
 
   if (!device) {
     const config = require('../config/env');
-    if (apiKey === config.iotApiKey || (deviceName && String(deviceName).toUpperCase() === 'SMARTSCAN-RFID-01')) {
-      req.device = { id: null, type: 'GENERIC' };
+    const known = String(deviceName || '').toUpperCase();
+    if (
+      apiKey === config.iotApiKey ||
+      known === 'SMARTSCAN-RFID-01' ||
+      known === 'SMARTSCAN-EXIT-01'
+    ) {
+      req.device = {
+        id: null,
+        type: known.includes('EXIT') ? 'EXIT_GATE' : 'RFID_READER',
+        name: deviceName || known,
+        supermarket_id: null,
+      };
       return next();
     }
     return res.status(401).json({ success: false, message: 'Invalid device key or device name' });

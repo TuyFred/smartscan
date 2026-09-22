@@ -232,7 +232,7 @@ void beep() {
     HIGH
   );
 
-  delay(250);
+  mqttPump(250);
 
   digitalWrite(
     BUZZER_PIN,
@@ -252,21 +252,21 @@ void successBeep() {
     HIGH
   );
 
-  delay(120);
+  mqttPump(120);
 
   digitalWrite(
     BUZZER_PIN,
     LOW
   );
 
-  delay(100);
+  mqttPump(100);
 
   digitalWrite(
     BUZZER_PIN,
     HIGH
   );
 
-  delay(120);
+  mqttPump(120);
 
   digitalWrite(
     BUZZER_PIN,
@@ -286,7 +286,7 @@ void errorBeep() {
     HIGH
   );
 
-  delay(600);
+  mqttPump(600);
 
   digitalWrite(
     BUZZER_PIN,
@@ -320,22 +320,24 @@ String getUID() {
       rfid.uid.uidByte[i],
       HEX
     );
-
-    if (
-      i < rfid.uid.size - 1
-    ) {
-
-      uid += ":";
-    }
   }
 
   // IMPORTANT:
-  // toUpperCase() modifies the String.
-  // It does NOT return a String.
-
+  // Send compact UID (no colons) so it matches cashier/DB storage
   uid.toUpperCase();
 
   return uid;
+}
+
+void mqttPump(unsigned long ms) {
+  unsigned long start = millis();
+  while (millis() - start < ms) {
+    if (mqttClient.connected()) {
+      mqttClient.loop();
+    }
+    delay(10);
+    yield();
+  }
 }
 
 
@@ -695,7 +697,7 @@ void mqttCallback(
     );
 
 
-    delay(2500);
+    mqttPump(2500);
 
 
     digitalWrite(
@@ -732,7 +734,7 @@ void mqttCallback(
     );
 
 
-    delay(2500);
+    mqttPump(2500);
 
 
     showReadyScreen();
@@ -763,7 +765,7 @@ void mqttCallback(
     );
 
 
-    delay(3000);
+    mqttPump(3000);
 
 
     showReadyScreen();
@@ -794,7 +796,7 @@ void mqttCallback(
     );
 
 
-    delay(3000);
+    mqttPump(3000);
 
 
     showReadyScreen();
@@ -825,7 +827,7 @@ void mqttCallback(
     );
 
 
-    delay(3000);
+    mqttPump(3000);
 
 
     showReadyScreen();
@@ -936,7 +938,7 @@ void mqttCallback(
     );
 
 
-    delay(3000);
+    mqttPump(3000);
 
 
     showReadyScreen();
@@ -971,7 +973,7 @@ void mqttCallback(
     );
 
 
-    delay(3000);
+    mqttPump(3000);
 
 
     showReadyScreen();
@@ -1006,7 +1008,7 @@ void mqttCallback(
     );
 
 
-    delay(3000);
+    mqttPump(3000);
 
 
     showReadyScreen();
@@ -1064,7 +1066,7 @@ void mqttCallback(
     );
 
 
-    delay(3500);
+    mqttPump(3500);
 
 
     digitalWrite(
@@ -1100,7 +1102,7 @@ void mqttCallback(
     );
 
 
-    delay(2500);
+    mqttPump(2500);
 
 
     showReadyScreen();
@@ -1527,7 +1529,7 @@ void readRFID() {
 
 
   // ===================================================
-  // SEND TO BACKEND
+  // ASK PIN / KEEP WAITING FOR DASHBOARD
   // ===================================================
 
   sendCardEvent(
@@ -1535,16 +1537,16 @@ void readRFID() {
   );
 
 
-  // ===================================================
-  // KEEP UID ON SCREEN
-  // ===================================================
+  showOLED(
+    "CARD SENT",
+    "UID:",
+    uid
+  );
 
-  delay(1500);
 
+  // Keep MQTT alive while waiting for backend command
+  mqttPump(800);
 
-  // ===================================================
-  // TURN CARD LED OFF
-  // ===================================================
 
   digitalWrite(
     RFID_LED,
@@ -1552,24 +1554,24 @@ void readRFID() {
   );
 
 
-  // ===================================================
-  // STOP RFID CARD
-  // ===================================================
-
   rfid.PICC_HaltA();
 
   rfid.PCD_StopCrypto1();
 
 
-  // ===================================================
-  // RETURN READY SCREEN
-  // ===================================================
-
+  // Do NOT reset to ready yet — wait for MQTT command
+  // (PAYMENT_ALLOWED / NOT_REGISTERED / NO_SESSION / …)
   if (
-    !waitingForPIN
+    !waitingForPIN &&
+    currentMode == MODE_REGISTRATION
   ) {
-
-    showReadyScreen();
+    // Registration feedback also comes via MQTT
+  } else if (!waitingForPIN) {
+    showOLED(
+      "SMARTSCAN",
+      "Processing...",
+      "Please wait"
+    );
   }
 }
 
@@ -1762,6 +1764,8 @@ void setup() {
   mqttClient.setCallback(
     mqttCallback
   );
+
+  mqttClient.setBufferSize(1024);
 
 
   connectMQTT();

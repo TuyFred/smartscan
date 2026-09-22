@@ -167,11 +167,24 @@ async function main() {
   await supabase.from('iot_devices').upsert(
     {
       device_code: 'IOT-RFID-001',
-      name: 'Main RFID Reader',
+      name: 'SMARTSCAN-RFID-01',
       type: 'RFID_READER',
       supermarket_id: market.id,
       branch_id: branch.id,
-      api_key: process.env.IOT_API_KEY || 'smartscan-iot-device-key-2026',
+      api_key: process.env.IOT_API_KEY || '5aef2560f2e82b80dc7fe02a533c85cf33950853',
+      status: 'ACTIVE',
+    },
+    { onConflict: 'device_code' }
+  );
+
+  await supabase.from('iot_devices').upsert(
+    {
+      device_code: 'IOT-EXIT-001',
+      name: 'SMARTSCAN-EXIT-01',
+      type: 'EXIT_GATE',
+      supermarket_id: market.id,
+      branch_id: branch.id,
+      api_key: process.env.IOT_API_KEY || '5aef2560f2e82b80dc7fe02a533c85cf33950853',
       status: 'ACTIVE',
     },
     { onConflict: 'device_code' }
