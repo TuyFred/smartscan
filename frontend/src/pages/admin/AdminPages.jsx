@@ -118,6 +118,7 @@ export function AdminDashboard() {
 
 export function AdminUsers() {
   const [rows, setRows] = useState([]);
+  const [q, setQ] = useState('');
   const [open, setOpen] = useState(false);
   const [editingUser, setEditingUser] = useState(null);
   const [saving, setSaving] = useState(false);
@@ -134,6 +135,22 @@ export function AdminUsers() {
 
   const load = () => api.get('/admin/users').then((r) => setRows(r.data.data || []));
   useEffect(() => { load(); }, []);
+
+  const needle = q.trim().toLowerCase();
+  const filtered = !needle
+    ? rows
+    : rows.filter((u) =>
+        `${u.full_name || ''} ${u.email || ''} ${u.phone || ''} ${u.role || ''} ${u.account_status || ''}`
+          .toLowerCase()
+          .includes(needle)
+      );
+
+  const statusBadge = (status) => {
+    if (status === 'APPROVED') return 'ss-badge-ok';
+    if (status === 'PENDING') return 'ss-badge-warn';
+    if (status === 'SUSPENDED' || status === 'REJECTED') return 'ss-badge-danger';
+    return 'ss-badge-muted';
+  };
 
   const setStatus = async (id, status) => {
     await api.patch(`/admin/users/${id}/status`, { status });
@@ -230,58 +247,87 @@ export function AdminUsers() {
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between rounded-2xl bg-white p-4 shadow-sm">
+      <div className="flex flex-col gap-3 rounded-3xl border border-slate-200 bg-white p-4 shadow-sm sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h2 className="font-display text-xl font-bold">User management</h2>
-          <p className="text-sm text-slate-500">Create, edit, delete, and approve user accounts.</p>
+          <p className="text-sm text-slate-500">Create, edit, approve, and manage accounts. Search updates live.</p>
         </div>
-        <button
-          type="button"
-          onClick={openCreate}
-          className="rounded-xl bg-slate-900 px-4 py-2 font-semibold text-white"
-        >
-          + Add user
-        </button>
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+          <div className="ss-search min-w-[16rem]">
+            <Search className="ss-search-icon h-4 w-4" />
+            <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search users…" />
+          </div>
+          <button
+            type="button"
+            onClick={openCreate}
+            className="rounded-xl bg-teal-600 px-4 py-2.5 font-semibold text-white hover:bg-teal-500"
+          >
+            + Add user
+          </button>
+        </div>
       </div>
 
       {message && (
         <div className="rounded-xl bg-teal-50 px-3 py-2 text-sm text-teal-800">{message}</div>
       )}
 
-      <div className="overflow-hidden rounded-2xl bg-white shadow-sm">
-        <table className="w-full text-sm">
-          <thead className="bg-slate-50 text-xs uppercase text-slate-500">
-            <tr>
-              <th className="px-4 py-3 text-left">User</th>
-              <th className="px-4 py-3">Role</th>
-              <th className="px-4 py-3">Verified</th>
-              <th className="px-4 py-3">Status</th>
-              <th className="px-4 py-3">Actions</th>
-            </tr>
-          </thead>
-          <tbody>
-            {rows.map((u) => (
-              <tr key={u.id} className="border-t">
-                <td className="px-4 py-3">
-                  <div className="font-medium">{u.full_name}</div>
-                  <div className="text-xs text-slate-400">{u.email}</div>
-                </td>
-                <td className="px-4 py-3 text-center">{u.role}</td>
-                <td className="px-4 py-3 text-center">{u.email_verified ? 'Yes' : 'No'}</td>
-                <td className="px-4 py-3 text-center">{u.account_status}</td>
-                <td className="px-4 py-3">
-                  <div className="flex flex-wrap justify-center gap-2">
-                    <button type="button" className="rounded-lg bg-sky-600 px-2.5 py-1.5 text-xs font-bold text-white hover:bg-sky-500" onClick={() => openEdit(u)}>Edit</button>
-                    <button type="button" className="rounded-lg bg-emerald-600 px-2.5 py-1.5 text-xs font-bold text-white hover:bg-emerald-500" onClick={() => setStatus(u.id, 'APPROVED')}>Approve</button>
-                    <button type="button" className="rounded-lg bg-amber-500 px-2.5 py-1.5 text-xs font-bold text-white hover:bg-amber-400" onClick={() => setStatus(u.id, 'SUSPENDED')}>Suspend</button>
-                    <button type="button" className="rounded-lg bg-orange-600 px-2.5 py-1.5 text-xs font-bold text-white hover:bg-orange-500" onClick={() => setStatus(u.id, 'REJECTED')}>Reject</button>
-                    <button type="button" className="rounded-lg bg-red-600 px-2.5 py-1.5 text-xs font-bold text-white hover:bg-red-500" onClick={() => deleteUser(u.id)}>Delete</button>
-                  </div>
-                </td>
+      <div className="overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm">
+        <div className="border-b border-slate-100 px-4 py-3 text-xs text-slate-500">
+          Showing <strong className="text-slate-800">{filtered.length}</strong> of {rows.length} users
+          {q ? <> for “{q}”</> : null}
+        </div>
+        <div className="table-wrap">
+          <table className="ss-table">
+            <thead>
+              <tr>
+                <th>User</th>
+                <th className="center">Role</th>
+                <th className="center">Verified</th>
+                <th className="center">Status</th>
+                <th className="center">Actions</th>
               </tr>
-            ))}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {filtered.map((u) => (
+                <tr key={u.id}>
+                  <td>
+                    <div className="flex items-center gap-3">
+                      <span className="ss-avatar">{(u.full_name || '?')[0]}</span>
+                      <div>
+                        <div className="font-semibold">{u.full_name}</div>
+                        <div className="text-xs text-slate-500">{u.email}</div>
+                        <div className="text-xs text-slate-400">{u.phone || 'No phone'}</div>
+                      </div>
+                    </div>
+                  </td>
+                  <td className="center"><span className="ss-badge ss-badge-info">{u.role}</span></td>
+                  <td className="center">
+                    <span className={`ss-badge ${u.email_verified ? 'ss-badge-ok' : 'ss-badge-warn'}`}>
+                      {u.email_verified ? 'Verified' : 'Unverified'}
+                    </span>
+                  </td>
+                  <td className="center">
+                    <span className={`ss-badge ${statusBadge(u.account_status)}`}>{u.account_status}</span>
+                  </td>
+                  <td className="center">
+                    <div className="flex flex-wrap justify-center gap-2">
+                      <button type="button" className="rounded-lg bg-sky-600 px-2.5 py-1.5 text-xs font-bold text-white hover:bg-sky-500" onClick={() => openEdit(u)}>Edit</button>
+                      <button type="button" className="rounded-lg bg-emerald-600 px-2.5 py-1.5 text-xs font-bold text-white hover:bg-emerald-500" onClick={() => setStatus(u.id, 'APPROVED')}>Approve</button>
+                      <button type="button" className="rounded-lg bg-amber-500 px-2.5 py-1.5 text-xs font-bold text-white hover:bg-amber-400" onClick={() => setStatus(u.id, 'SUSPENDED')}>Suspend</button>
+                      <button type="button" className="rounded-lg bg-orange-600 px-2.5 py-1.5 text-xs font-bold text-white hover:bg-orange-500" onClick={() => setStatus(u.id, 'REJECTED')}>Reject</button>
+                      <button type="button" className="rounded-lg bg-red-600 px-2.5 py-1.5 text-xs font-bold text-white hover:bg-red-500" onClick={() => deleteUser(u.id)}>Delete</button>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+              {!filtered.length && (
+                <tr>
+                  <td colSpan={5} className="center text-slate-400">No users match your search</td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
       </div>
 
       {open && (
