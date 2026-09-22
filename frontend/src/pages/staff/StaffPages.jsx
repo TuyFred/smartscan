@@ -38,23 +38,33 @@ const managerLinks = [
   { to: '/manager/payments', label: 'Payments', icon: <CreditCard className="h-4 w-4" /> },
   { to: '/manager/supermarket', label: 'My Supermarket', icon: <Store className="h-4 w-4" /> },
   { to: '/manager/devices', label: 'Device Status', icon: <Shield className="h-4 w-4" /> },
-  { to: '/manager/reports', label: 'Reports', icon: <BarChart3 className="h-4 w-4" /> },
+  { to: '/manager/reports', label: 'Store Reports', icon: <BarChart3 className="h-4 w-4" /> },
 ];
 
 export function ManagerShell() {
-  return <DashboardLayout title="Manager" links={managerLinks} />;
+  return <DashboardLayout title="Store Manager" links={managerLinks} variant="manager" />;
 }
 
 export function ManagerDashboard() {
   const [stats, setStats] = useState(null);
-  const { socket, user } = useAuth();
+  const [storeName, setStoreName] = useState('');
+  const { socket, user, refreshMe } = useAuth();
 
   const loadDashboard = () => {
     api.get('/admin/stats').then((r) => setStats(r.data.data)).catch(() => {});
+    api
+      .get('/supermarkets')
+      .then((r) => {
+        const list = r.data.data || [];
+        const active = list.find((m) => m.isActiveContext || m.id === user?.supermarketId) || list[0];
+        setStoreName(active?.name || user?.supermarketName || '');
+      })
+      .catch(() => setStoreName(user?.supermarketName || ''));
   };
 
   useEffect(() => {
     loadDashboard();
+    refreshMe?.();
   }, [user?.supermarketId]);
 
   useEffect(() => {
@@ -77,10 +87,13 @@ export function ManagerDashboard() {
 
   return (
     <div className="space-y-4">
-      <div className="rounded-3xl bg-slate-900 p-5 text-white sm:p-6">
-        <h2 className="font-display text-2xl font-bold">Store status</h2>
+      <div className="rounded-3xl bg-gradient-to-br from-teal-900 via-slate-900 to-slate-950 p-5 text-white sm:p-6">
+        <div className="inline-flex items-center gap-2 rounded-full bg-teal-500/20 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-teal-200">
+          Store Manager · Owner
+        </div>
+        <h2 className="mt-3 font-display text-2xl font-bold">{storeName || 'Your supermarket'}</h2>
         <p className="mt-1 text-sm text-slate-300">
-          Live counts for your <strong className="text-teal-300">active</strong> supermarket only. Switch stores under My Supermarket.
+          You only see and manage this supermarket — products, customers who scanned here, sessions, and payments. Platform-wide admin tools are not available here.
         </p>
       </div>
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
@@ -829,7 +842,7 @@ export function ManagerSupermarket() {
         <div>
           <h2 className="font-display text-xl font-bold">My supermarkets</h2>
           <p className="mt-1 text-sm text-slate-500">
-            List every store you own. Click <strong>Manage</strong> to switch products, customers, sessions, and payments to that store.
+            Only stores you own appear here. Click <strong>Manage this store</strong> to switch products, customers, sessions, and payments to that store alone.
           </p>
         </div>
         <button type="button" onClick={() => setFormOpen(true)} className="ss-btn ss-btn-primary">
@@ -972,5 +985,75 @@ export function ManagerSupermarket() {
 }
 
 export function ManagerReports() {
-  return <ReportWorkspace roleLabel="Manager" />;
+  return <ReportWorkspace roleLabel="Store Manager" />;
+}
+
+export function ManagerDevices() {
+  const [devices, setDevices] = useState([]);
+  const [systemStatus, setSystemStatus] = useState('checking');
+  const { user } = useAuth();
+
+  useEffect(() => {
+    Promise.all([api.get('/admin/devices'), api.get('/health')])
+      .then(([deviceRes, healthRes]) => {
+        const all = deviceRes.data.data || [];
+        const mine = user?.supermarketId
+          ? all.filter((d) => !d.supermarket_id || d.supermarket_id === user.supermarketId)
+          : all;
+        setDevices(mine);
+        setSystemStatus(healthRes?.data?.success ? 'online' : 'offline');
+      })
+      .catch(() => setSystemStatus('offline'));
+  }, [user?.supermarketId]);
+
+  return (
+    <div className="space-y-4">
+      <div className="rounded-3xl bg-gradient-to-br from-teal-900 to-slate-900 p-5 text-white">
+        <h2 className="font-display text-xl font-bold">Device status</h2>
+        <p className="mt-1 text-sm text-slate-300">Read-only status for your store. Device registration is handled by platform admin.</p>
+      </div>
+      <div className="rounded-2xl bg-white p-5 shadow-sm">
+        <div className="flex items-center justify-between gap-3">
+          <h3 className="font-semibold">Connection</h3>
+          <span
+            className={`rounded-full px-2.5 py-1 text-xs font-semibold ${
+              systemStatus === 'online' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'
+            }`}
+          >
+            {systemStatus === 'online' ? 'System online' : systemStatus === 'checking' ? 'Checking…' : 'Offline'}
+          </span>
+        </div>
+      </div>
+      <div className="rounded-2xl bg-white p-5 shadow-sm">
+        <h3 className="font-semibold">Devices</h3>
+        <div className="mt-3 space-y-3">
+          {devices.map((device) => (
+            <div key={device.id} className="rounded-xl border border-slate-200 p-3">
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <div className="font-medium">{device.name}</div>
+                  <div className="text-xs text-slate-500">
+                    {device.device_code} · {device.type}
+                  </div>
+                </div>
+                <span
+                  className={
+                    device.connected
+                      ? 'rounded-full bg-green-100 px-2 py-1 text-xs font-semibold text-green-700'
+                      : 'rounded-full bg-red-100 px-2 py-1 text-xs font-semibold text-red-700'
+                  }
+                >
+                  {device.connected ? 'Connected' : 'Not connected'}
+                </span>
+              </div>
+              <div className="mt-2 text-xs text-slate-500">
+                Last seen: {device.last_seen_at ? new Date(device.last_seen_at).toLocaleString() : 'Never'}
+              </div>
+            </div>
+          ))}
+          {!devices.length && <p className="text-sm text-slate-500">No devices linked to your supermarket yet.</p>}
+        </div>
+      </div>
+    </div>
+  );
 }

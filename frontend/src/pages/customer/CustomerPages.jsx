@@ -29,7 +29,7 @@ const links = [
 ];
 
 export function CustomerShell() {
-  return <DashboardLayout title="Customer" links={links} />;
+  return <DashboardLayout title="Customer" links={links} variant="customer" />;
 }
 
 export function CustomerDashboard() {

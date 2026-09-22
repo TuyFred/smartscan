@@ -46,12 +46,12 @@ const links = [
 ];
 
 export function AdminShell() {
-  return <DashboardLayout title="Admin" links={links} />;
+  return <DashboardLayout title="Platform Admin" links={links} variant="admin" />;
 }
 
 export function AdminDashboard() {
   const [stats, setStats] = useState(null);
-  const { socket } = useAuth();
+  const { socket, user } = useAuth();
 
   const loadStats = () => {
     api.get('/admin/stats').then((r) => setStats(r.data.data)).catch(() => {});
@@ -75,8 +75,8 @@ export function AdminDashboard() {
     { label: 'Users', value: stats?.users, tone: 'border-sky-200 bg-sky-50 text-sky-900' },
     { label: 'Pending approvals', value: stats?.pendingApprovals, tone: 'border-amber-200 bg-amber-50 text-amber-900' },
     { label: 'Pending PIN', value: stats?.pendingPinApprovals, tone: 'border-orange-200 bg-orange-50 text-orange-900' },
-    { label: 'Supermarkets', value: stats?.supermarkets, tone: 'border-teal-200 bg-teal-50 text-teal-900' },
-    { label: 'Products', value: stats?.products, tone: 'border-indigo-200 bg-indigo-50 text-indigo-900' },
+    { label: 'Supermarkets', value: stats?.supermarkets, tone: 'border-indigo-200 bg-indigo-50 text-indigo-900' },
+    { label: 'Products', value: stats?.products, tone: 'border-violet-200 bg-violet-50 text-violet-900' },
     { label: 'Sessions', value: stats?.shopping_sessions, tone: 'border-slate-200 bg-slate-50 text-slate-900' },
     { label: 'Payments', value: stats?.payments, tone: 'border-emerald-200 bg-emerald-50 text-emerald-900' },
     { label: 'Receipts', value: stats?.receipts, tone: 'border-cyan-200 bg-cyan-50 text-cyan-900' },
@@ -84,10 +84,38 @@ export function AdminDashboard() {
 
   return (
     <div className="space-y-4">
-      <div className="rounded-3xl bg-slate-900 p-5 text-white sm:p-6">
-        <h2 className="font-display text-2xl font-bold">System status</h2>
-        <p className="mt-1 text-sm text-slate-300">Live platform counts. Full reports are in System Reports.</p>
+      <div className="rounded-3xl bg-gradient-to-br from-slate-900 via-slate-900 to-indigo-950 p-5 text-white sm:p-6">
+        <div className="inline-flex items-center gap-2 rounded-full bg-indigo-500/20 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-indigo-200">
+          Platform Admin
+        </div>
+        <h2 className="mt-3 font-display text-2xl font-bold">System control center</h2>
+        <p className="mt-1 text-sm text-slate-300">
+          You manage the whole SMARTSCAN platform — users, all supermarkets, approvals, and system reports. This is not a store manager view.
+        </p>
+        <p className="mt-2 text-xs text-slate-400">
+          Signed in as {user?.fullName || 'Admin'} · {user?.email}
+        </p>
       </div>
+
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        <Link to="/admin/users" className="rounded-2xl border border-indigo-100 bg-white p-4 shadow-sm transition hover:border-indigo-300">
+          <div className="text-xs font-semibold uppercase tracking-wide text-indigo-500">Quick link</div>
+          <div className="mt-1 font-display text-lg font-bold text-slate-900">Users & approvals</div>
+        </Link>
+        <Link to="/admin/supermarkets" className="rounded-2xl border border-indigo-100 bg-white p-4 shadow-sm transition hover:border-indigo-300">
+          <div className="text-xs font-semibold uppercase tracking-wide text-indigo-500">Quick link</div>
+          <div className="mt-1 font-display text-lg font-bold text-slate-900">All supermarkets</div>
+        </Link>
+        <Link to="/admin/reports" className="rounded-2xl border border-indigo-100 bg-white p-4 shadow-sm transition hover:border-indigo-300">
+          <div className="text-xs font-semibold uppercase tracking-wide text-indigo-500">Quick link</div>
+          <div className="mt-1 font-display text-lg font-bold text-slate-900">System reports</div>
+        </Link>
+        <Link to="/admin/pin-requests" className="rounded-2xl border border-indigo-100 bg-white p-4 shadow-sm transition hover:border-indigo-300">
+          <div className="text-xs font-semibold uppercase tracking-wide text-indigo-500">Quick link</div>
+          <div className="mt-1 font-display text-lg font-bold text-slate-900">PIN approvals</div>
+        </Link>
+      </div>
+
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         {statusCards.map((card) => (
           <div key={card.label} className={`rounded-2xl border p-4 shadow-sm ${card.tone}`}>
@@ -522,6 +550,8 @@ export function AdminSupermarkets() {
   const toast = useToast();
   const [markets, setMarkets] = useState([]);
   const [formOpen, setFormOpen] = useState(false);
+  const [editOpen, setEditOpen] = useState(false);
+  const [editing, setEditing] = useState(null);
   const [loading, setLoading] = useState(false);
   const [qrModal, setQrModal] = useState(null);
   const [createdManager, setCreatedManager] = useState(null);
@@ -535,6 +565,14 @@ export function AdminSupermarkets() {
     managerEmail: '',
     managerPassword: '',
     managerPhone: '',
+  });
+  const [editForm, setEditForm] = useState({
+    name: '',
+    description: '',
+    address: '',
+    phone: '',
+    email: '',
+    status: 'ACTIVE',
   });
   const { page, setPage, pages, total, slice } = usePagination(markets);
 
@@ -607,17 +645,58 @@ export function AdminSupermarkets() {
     a.click();
   };
 
+  const openEdit = (m) => {
+    setEditing(m);
+    setEditForm({
+      name: m.name || '',
+      description: m.description || '',
+      address: m.address || '',
+      phone: m.phone || '',
+      email: m.email || '',
+      status: m.status || 'ACTIVE',
+    });
+    setEditOpen(true);
+  };
+
+  const saveEdit = async (e) => {
+    e.preventDefault();
+    if (!editing) return;
+    setLoading(true);
+    try {
+      await api.put(`/supermarkets/${editing.id}`, editForm);
+      toast.success(`“${editForm.name}” updated`);
+      setEditOpen(false);
+      setEditing(null);
+      load();
+    } catch (err) {
+      toast.error(err.response?.data?.message || 'Could not update supermarket');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const removeMarket = async (m) => {
+    if (!window.confirm(`Deactivate supermarket “${m.name}”? Products and branches will be deactivated.`)) return;
+    try {
+      const { data } = await api.delete(`/supermarkets/${m.id}`);
+      toast.success(data.message || 'Supermarket deactivated');
+      load();
+    } catch (err) {
+      toast.error(err.response?.data?.message || 'Could not delete supermarket');
+    }
+  };
+
   return (
     <div className="space-y-5">
-      <div className="overflow-hidden rounded-3xl border border-slate-200 bg-gradient-to-br from-slate-900 via-slate-900 to-teal-900 p-6 text-white shadow-sm sm:p-7">
+      <div className="overflow-hidden rounded-3xl border border-slate-200 bg-gradient-to-br from-slate-900 via-slate-900 to-indigo-950 p-6 text-white shadow-sm sm:p-7">
         <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
           <div className="max-w-2xl">
-            <div className="mb-2 inline-flex items-center gap-2 rounded-full bg-white/10 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-teal-200">
+            <div className="mb-2 inline-flex items-center gap-2 rounded-full bg-white/10 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-indigo-200">
               <Building2 className="h-3.5 w-3.5" /> Platform administration
             </div>
-            <h2 className="font-display text-2xl font-bold sm:text-3xl">Supermarkets</h2>
+            <h2 className="font-display text-2xl font-bold sm:text-3xl">All supermarkets</h2>
             <p className="mt-2 text-sm leading-6 text-slate-300">
-              Create a store and issue a manager login in one step. The manager uses their email and password to sign in and run that supermarket only.
+              Create, edit, or deactivate stores and assign manager logins. Each manager only sees and runs their own supermarket.
             </p>
           </div>
           <button type="button" onClick={() => setFormOpen(true)} className="ss-btn ss-btn-primary shrink-0">
@@ -658,7 +737,7 @@ export function AdminSupermarkets() {
                 <th>Manager login</th>
                 <th>Branches</th>
                 <th className="center">Status</th>
-                <th className="center">Entrance QR</th>
+                <th className="center">Actions</th>
               </tr>
             </thead>
             <tbody>
@@ -683,9 +762,12 @@ export function AdminSupermarkets() {
                   <td>
                     <div className="space-y-1">
                       {(m.branches || []).map((b) => (
-                        <div key={b.id} className="text-sm">
+                        <div key={b.id} className="flex flex-wrap items-center gap-2 text-sm">
                           <span className="font-medium">{b.name}</span>
-                          <span className="ml-2 text-xs text-slate-400">{b.code}</span>
+                          <span className="text-xs text-slate-400">{b.code}</span>
+                          <button type="button" title="Entrance QR" className="ss-icon-btn ss-icon-muted" onClick={() => showBranchQr(b.id, m.name)}>
+                            <QrCode />
+                          </button>
                         </div>
                       ))}
                       {!m.branches?.length && <span className="text-slate-400">None</span>}
@@ -695,16 +777,14 @@ export function AdminSupermarkets() {
                     <span className={`ss-badge ${m.status === 'ACTIVE' ? 'ss-badge-ok' : 'ss-badge-warn'}`}>{m.status}</span>
                   </td>
                   <td className="center">
-                    {(m.branches || []).map((b) => (
-                      <button
-                        key={b.id}
-                        type="button"
-                        className="ss-btn ss-btn-ghost"
-                        onClick={() => showBranchQr(b.id, m.name)}
-                      >
-                        <QrCode className="h-4 w-4" /> QR
+                    <div className="ss-actions">
+                      <button type="button" title="Edit" className="ss-icon-btn ss-icon-edit" onClick={() => openEdit(m)}>
+                        <Pencil />
                       </button>
-                    ))}
+                      <button type="button" title="Deactivate" className="ss-icon-btn ss-icon-danger" onClick={() => removeMarket(m)}>
+                        <Trash2 />
+                      </button>
+                    </div>
                   </td>
                 </tr>
               ))}
@@ -834,6 +914,44 @@ export function AdminSupermarkets() {
             </button>
             <button type="submit" disabled={loading} className="ss-btn ss-btn-primary disabled:opacity-60">
               {loading ? 'Creating…' : 'Create store & manager'}
+            </button>
+          </div>
+        </form>
+      </Modal>
+
+      <Modal open={editOpen} title="Edit supermarket" onClose={() => setEditOpen(false)} wide>
+        <form onSubmit={saveEdit} className="grid gap-3 sm:grid-cols-2">
+          <label className="text-sm font-medium text-slate-700 sm:col-span-2">
+            Name
+            <input required className="field-input mt-1" value={editForm.name} onChange={(e) => setEditForm({ ...editForm, name: e.target.value })} />
+          </label>
+          <label className="text-sm font-medium text-slate-700">
+            Phone
+            <input className="field-input mt-1" value={editForm.phone} onChange={(e) => setEditForm({ ...editForm, phone: e.target.value })} />
+          </label>
+          <label className="text-sm font-medium text-slate-700">
+            Email
+            <input type="email" className="field-input mt-1" value={editForm.email} onChange={(e) => setEditForm({ ...editForm, email: e.target.value })} />
+          </label>
+          <label className="text-sm font-medium text-slate-700 sm:col-span-2">
+            Address
+            <input className="field-input mt-1" value={editForm.address} onChange={(e) => setEditForm({ ...editForm, address: e.target.value })} />
+          </label>
+          <label className="text-sm font-medium text-slate-700 sm:col-span-2">
+            Description
+            <textarea className="field-input mt-1" rows={2} value={editForm.description} onChange={(e) => setEditForm({ ...editForm, description: e.target.value })} />
+          </label>
+          <label className="text-sm font-medium text-slate-700 sm:col-span-2">
+            Status
+            <select className="field-input mt-1" value={editForm.status} onChange={(e) => setEditForm({ ...editForm, status: e.target.value })}>
+              <option value="ACTIVE">ACTIVE</option>
+              <option value="INACTIVE">INACTIVE</option>
+            </select>
+          </label>
+          <div className="flex flex-col-reverse gap-2 sm:col-span-2 sm:flex-row sm:justify-end">
+            <button type="button" onClick={() => setEditOpen(false)} className="ss-btn ss-btn-ghost">Cancel</button>
+            <button type="submit" disabled={loading} className="ss-btn ss-btn-primary disabled:opacity-60">
+              {loading ? 'Saving…' : 'Save changes'}
             </button>
           </div>
         </form>

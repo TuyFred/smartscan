@@ -25,7 +25,7 @@ const cashierLinks = [
 ];
 
 export function CashierShell() {
-  return <DashboardLayout title="Cashier" links={cashierLinks} />;
+  return <DashboardLayout title="Cashier" links={cashierLinks} variant="cashier" />;
 }
 
 export function CashierDashboard() {

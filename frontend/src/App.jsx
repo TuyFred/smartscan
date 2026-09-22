@@ -29,6 +29,7 @@ import {
   ManagerPayments,
   ManagerSupermarket,
   ManagerReports,
+  ManagerDevices,
   CashierShell,
   CashierDashboard,
   CashierDeposits,
@@ -90,8 +91,8 @@ export default function App() {
               <Route path="customers" element={<ManagerCustomers />} />
               <Route path="payments" element={<ManagerPayments />} />
               <Route path="supermarket" element={<ManagerSupermarket />} />
+              <Route path="devices" element={<ManagerDevices />} />
               <Route path="reports" element={<ManagerReports />} />
-              <Route path="devices" element={<AdminDevices />} />
             </Route>
           </Route>
 

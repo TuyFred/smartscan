@@ -50,7 +50,7 @@ async function createAndSendOtp(userId, email, purpose) {
   return true;
 }
 
-function publicUser(user, roleName) {
+function publicUser(user, roleName, extras = {}) {
   return {
     id: user.id,
     fullName: user.full_name,
@@ -64,6 +64,7 @@ function publicUser(user, roleName) {
     accountStatus: user.account_status,
     supermarketId: user.supermarket_id,
     branchId: user.branch_id,
+    supermarketName: extras.supermarketName || user.supermarkets?.name || null,
     hasPaymentPin: Boolean(user.payment_pin_hash) && user.payment_pin_status === 'APPROVED',
     paymentPinStatus: user.payment_pin_status || 'NONE',
   };
@@ -461,12 +462,40 @@ exports.login = async (req, res) => {
 };
 
 exports.me = async (req, res) => {
-  const { data: user } = await supabase
+  let { data: user, error } = await supabase
     .from('users')
-    .select('*, roles(name)')
+    .select('*, roles(name), supermarkets(id, name)')
     .eq('id', req.user.id)
     .single();
-  return res.json({ success: true, data: publicUser(user, user.roles.name) });
+
+  if (error || !user) {
+    const fallback = await supabase
+      .from('users')
+      .select('*, roles(name)')
+      .eq('id', req.user.id)
+      .single();
+    user = fallback.data;
+    if (!user) return res.status(404).json({ success: false, message: 'User not found' });
+
+    let supermarketName = null;
+    if (user.supermarket_id) {
+      const { data: market } = await supabase
+        .from('supermarkets')
+        .select('name')
+        .eq('id', user.supermarket_id)
+        .maybeSingle();
+      supermarketName = market?.name || null;
+    }
+    return res.json({
+      success: true,
+      data: publicUser(user, user.roles?.name, { supermarketName }),
+    });
+  }
+
+  return res.json({
+    success: true,
+    data: publicUser(user, user.roles?.name, { supermarketName: user.supermarkets?.name || null }),
+  });
 };
 
 exports.setPaymentPin = async (req, res) => {

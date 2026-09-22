@@ -277,9 +277,13 @@ export function ReportWorkspace({ roleLabel }) {
         <div className="inline-flex items-center gap-2 rounded-full bg-white/10 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-teal-200">
           <FileText className="h-3.5 w-3.5" /> {roleLabel} reports
         </div>
-        <h2 className="mt-3 font-display text-2xl font-bold">{report?.title || 'SMARTSCAN reports'}</h2>
+        <h2 className="mt-3 font-display text-2xl font-bold">
+          {report?.title || (isAdmin ? 'SMARTSCAN System Report' : 'SMARTSCAN Store Report')}
+        </h2>
         <p className="mt-1 text-sm text-slate-300">
-          Select a date range, generate a live preview, then download PDF or CSV.
+          {isAdmin
+            ? 'Platform-wide live data. Filter by supermarket if needed, preview, then download.'
+            : 'Live data for your supermarket only. Select a date range, preview, then download.'}
         </p>
         {report?.generatedAt && (
           <p className="mt-2 text-xs text-slate-400">

@@ -6,23 +6,24 @@ const { writeAudit } = require('../services/auditService');
 exports.listSupermarkets = async (req, res) => {
   try {
     if (req.user?.role === 'MANAGER') {
+      // Manager sees ONLY stores they own (isolated from other managers)
       const { data: owned, error } = await supabase
         .from('supermarkets')
         .select('*, branches(*)')
-        .or(`owner_id.eq.${req.user.id},id.eq.${req.user.supermarketId || '00000000-0000-0000-0000-000000000000'}`)
+        .eq('owner_id', req.user.id)
         .order('created_at', { ascending: false });
       if (error) throw error;
-      const unique = [];
-      const seen = new Set();
-      for (const row of owned || []) {
-        if (seen.has(row.id)) continue;
-        seen.add(row.id);
-        unique.push({
+      return res.json({
+        success: true,
+        data: (owned || []).map((row) => ({
           ...row,
           isActiveContext: row.id === req.user.supermarketId,
-        });
-      }
-      return res.json({ success: true, data: unique });
+        })),
+      });
+    }
+
+    if (req.user?.role !== 'ADMIN') {
+      return res.status(403).json({ success: false, message: 'Forbidden' });
     }
 
     let { data, error } = await supabase
@@ -31,7 +32,6 @@ exports.listSupermarkets = async (req, res) => {
       .order('created_at', { ascending: false });
 
     if (error) {
-      // Fallback if relationship alias is unavailable
       const fallback = await supabase
         .from('supermarkets')
         .select('*, branches(*)')
@@ -326,18 +326,27 @@ exports.getBranchQr = async (req, res) => {
 /** Switch manager's active supermarket context (products, customers, sessions) */
 exports.switchActiveSupermarket = async (req, res) => {
   try {
+    // Admin stays platform-wide — never bind admin account to a single store
+    if (req.user.role === 'ADMIN') {
+      return res.status(400).json({
+        success: false,
+        message: 'Admins manage all stores from the Admin panel. Use Edit on Supermarkets instead of switching context.',
+      });
+    }
+
     const supermarketId = req.params.id;
     const { data: market, error } = await supabase
       .from('supermarkets')
-      .select('id, name, owner_id, branches(id, name)')
+      .select('id, name, owner_id, status, branches(id, name)')
       .eq('id', supermarketId)
       .single();
     if (error || !market) return res.status(404).json({ success: false, message: 'Supermarket not found' });
+    if (market.status === 'INACTIVE') {
+      return res.status(400).json({ success: false, message: 'This supermarket is inactive' });
+    }
 
-    const isOwner = market.owner_id === req.user.id;
-    const isAssigned = req.user.supermarketId === supermarketId;
-    if (req.user.role !== 'ADMIN' && !isOwner && !isAssigned) {
-      return res.status(403).json({ success: false, message: 'Not allowed to manage this supermarket' });
+    if (market.owner_id !== req.user.id) {
+      return res.status(403).json({ success: false, message: 'You can only manage supermarkets you own' });
     }
 
     const branchId = market.branches?.[0]?.id || null;
@@ -350,6 +359,87 @@ exports.switchActiveSupermarket = async (req, res) => {
       success: true,
       message: `Now managing ${market.name}`,
       data: { supermarketId: market.id, branchId, name: market.name },
+    });
+  } catch (err) {
+    return res.status(500).json({ success: false, message: err.message });
+  }
+};
+
+exports.updateSupermarket = async (req, res) => {
+  try {
+    if (req.user.role !== 'ADMIN') {
+      return res.status(403).json({ success: false, message: 'Only admin can edit supermarkets' });
+    }
+    const updates = {};
+    const map = {
+      name: 'name',
+      description: 'description',
+      address: 'address',
+      phone: 'phone',
+      email: 'email',
+      status: 'status',
+    };
+    Object.entries(map).forEach(([bodyKey, dbKey]) => {
+      if (req.body[bodyKey] !== undefined) updates[dbKey] = req.body[bodyKey];
+    });
+    if (!Object.keys(updates).length) {
+      return res.status(400).json({ success: false, message: 'No fields to update' });
+    }
+
+    const { data, error } = await supabase
+      .from('supermarkets')
+      .update(updates)
+      .eq('id', req.params.id)
+      .select('*')
+      .single();
+    if (error) throw error;
+
+    await writeAudit({
+      userId: req.user.id,
+      action: 'UPDATE_SUPERMARKET',
+      entityType: 'supermarkets',
+      entityId: data.id,
+      details: updates,
+      ip: req.ip,
+    });
+
+    return res.json({ success: true, message: 'Supermarket updated', data });
+  } catch (err) {
+    return res.status(500).json({ success: false, message: err.message });
+  }
+};
+
+exports.deleteSupermarket = async (req, res) => {
+  try {
+    if (req.user.role !== 'ADMIN') {
+      return res.status(403).json({ success: false, message: 'Only admin can delete supermarkets' });
+    }
+
+    const id = req.params.id;
+    const { data: market, error: findErr } = await supabase
+      .from('supermarkets')
+      .select('id, name')
+      .eq('id', id)
+      .maybeSingle();
+    if (findErr || !market) return res.status(404).json({ success: false, message: 'Supermarket not found' });
+
+    // Soft-delete store + deactivate products/branches to keep history
+    await supabase.from('supermarkets').update({ status: 'INACTIVE' }).eq('id', id);
+    await supabase.from('branches').update({ status: 'INACTIVE' }).eq('supermarket_id', id);
+    await supabase.from('products').update({ status: 'INACTIVE' }).eq('supermarket_id', id);
+
+    await writeAudit({
+      userId: req.user.id,
+      action: 'DELETE_SUPERMARKET',
+      entityType: 'supermarkets',
+      entityId: id,
+      details: { name: market.name, mode: 'soft' },
+      ip: req.ip,
+    });
+
+    return res.json({
+      success: true,
+      message: `Supermarket “${market.name}” deactivated. Managers can no longer operate it.`,
     });
   } catch (err) {
     return res.status(500).json({ success: false, message: err.message });
