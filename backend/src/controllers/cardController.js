@@ -333,10 +333,15 @@ exports.searchCustomers = async (req, res) => {
     const needle = q.toLowerCase();
     const uidNeedle = normalizeCardUid(q).toLowerCase();
     data = (data || []).filter((row) => {
+      const cards = Array.isArray(row.customer_cards)
+        ? row.customer_cards
+        : row.customer_cards
+          ? [row.customer_cards]
+          : [];
       const name = String(row.full_name || '').toLowerCase();
       const email = String(row.email || '').toLowerCase();
       const phone = String(row.phone || '').toLowerCase();
-      const uid = normalizeCardUid(row.customer_cards?.[0]?.card_uid || '').toLowerCase();
+      const uid = normalizeCardUid(cards[0]?.card_uid || '').toLowerCase();
       return (
         name.includes(needle) ||
         email.includes(needle) ||
@@ -346,7 +351,16 @@ exports.searchCustomers = async (req, res) => {
     });
   }
 
-  return res.json({ success: true, data: data || [] });
+  data = (data || []).map((row) => ({
+    ...row,
+    customer_cards: Array.isArray(row.customer_cards)
+      ? row.customer_cards
+      : row.customer_cards
+        ? [row.customer_cards]
+        : [],
+  }));
+
+  return res.json({ success: true, data });
 };
 
 exports.checkCardUid = async (req, res) => {

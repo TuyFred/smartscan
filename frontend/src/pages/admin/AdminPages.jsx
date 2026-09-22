@@ -17,6 +17,7 @@ import {
 import DashboardLayout from '../../components/DashboardLayout';
 import api, { formatRwf } from '../../lib/api';
 import { useAuth } from '../../lib/auth';
+import { Modal, Pagination, usePagination, useToast } from '../../lib/ui';
 import { ManagerProducts, ManagerSupermarket } from '../staff/StaffPages';
 
 const links = [
@@ -116,25 +117,28 @@ export function AdminDashboard() {
   );
 }
 
+const emptyUserForm = {
+  fullName: '',
+  email: '',
+  phone: '',
+  password: 'Password123!',
+  role: 'CASHIER',
+  supermarketId: '',
+};
+
 export function AdminUsers() {
+  const toast = useToast();
   const [rows, setRows] = useState([]);
   const [q, setQ] = useState('');
   const [open, setOpen] = useState(false);
   const [editingUser, setEditingUser] = useState(null);
   const [saving, setSaving] = useState(false);
-  const [message, setMessage] = useState('');
-  const [form, setForm] = useState({
-    fullName: '',
-    email: '',
-    phone: '',
-    password: 'Password123!',
-    role: 'CASHIER',
-    supermarketId: '',
-    branchId: '',
-  });
+  const [form, setForm] = useState(emptyUserForm);
 
   const load = () => api.get('/admin/users').then((r) => setRows(r.data.data || []));
-  useEffect(() => { load(); }, []);
+  useEffect(() => {
+    load();
+  }, []);
 
   const needle = q.trim().toLowerCase();
   const filtered = !needle
@@ -145,6 +149,9 @@ export function AdminUsers() {
           .includes(needle)
       );
 
+  const { page, setPage, pages, total, slice } = usePagination(filtered);
+  const needsMarket = form.role === 'MANAGER' || form.role === 'CASHIER';
+
   const statusBadge = (status) => {
     if (status === 'APPROVED') return 'ss-badge-ok';
     if (status === 'PENDING') return 'ss-badge-warn';
@@ -153,8 +160,13 @@ export function AdminUsers() {
   };
 
   const setStatus = async (id, status) => {
-    await api.patch(`/admin/users/${id}/status`, { status });
-    load();
+    try {
+      await api.patch(`/admin/users/${id}/status`, { status });
+      toast.success(`User ${status.toLowerCase()}`);
+      load();
+    } catch (err) {
+      toast.error(err.response?.data?.message || 'Status update failed');
+    }
   };
 
   const handleChange = (e) => {
@@ -164,15 +176,7 @@ export function AdminUsers() {
 
   const openCreate = () => {
     setEditingUser(null);
-    setForm({
-      fullName: '',
-      email: '',
-      phone: '',
-      password: 'Password123!',
-      role: 'CASHIER',
-      supermarketId: '',
-      branchId: '',
-    });
+    setForm(emptyUserForm);
     setOpen(true);
   };
 
@@ -185,7 +189,6 @@ export function AdminUsers() {
       password: '',
       role: user.role || 'CASHIER',
       supermarketId: user.supermarket_id || '',
-      branchId: user.branch_id || '',
     });
     setOpen(true);
   };
@@ -193,40 +196,30 @@ export function AdminUsers() {
   const saveUser = async (e) => {
     e.preventDefault();
     setSaving(true);
-    setMessage('');
     try {
       const payload = {
         fullName: form.fullName,
         email: form.email,
         phone: form.phone,
         role: form.role,
-        supermarketId: form.supermarketId || undefined,
-        branchId: form.branchId || undefined,
+        supermarketId: needsMarket ? form.supermarketId || undefined : undefined,
       };
       if (!editingUser && form.password) payload.password = form.password;
       if (editingUser) {
         await api.patch(`/admin/users/${editingUser.id}`, payload);
-        setMessage('User updated successfully');
+        toast.success('User updated');
       } else {
         await api.post('/admin/staff', {
           ...payload,
           password: form.password,
         });
-        setMessage('User created successfully');
+        toast.success('User created');
       }
       setOpen(false);
-      setForm({
-        fullName: '',
-        email: '',
-        phone: '',
-        password: 'Password123!',
-        role: 'CASHIER',
-        supermarketId: '',
-        branchId: '',
-      });
+      setForm(emptyUserForm);
       load();
     } catch (err) {
-      setMessage(err.response?.data?.message || 'Unable to save user');
+      toast.error(err.response?.data?.message || 'Unable to save user');
     } finally {
       setSaving(false);
     }
@@ -236,14 +229,12 @@ export function AdminUsers() {
     if (!window.confirm('Delete this user?')) return;
     try {
       await api.delete(`/admin/users/${id}`);
-      setMessage('User deactivated successfully');
+      toast.success('User deactivated');
       load();
     } catch (err) {
-      setMessage(err.response?.data?.message || 'Unable to delete user');
+      toast.error(err.response?.data?.message || 'Unable to delete user');
     }
   };
-
-  const createUser = async (e) => saveUser(e);
 
   return (
     <div className="space-y-4">
@@ -257,19 +248,11 @@ export function AdminUsers() {
             <Search className="ss-search-icon h-4 w-4" />
             <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search users…" />
           </div>
-          <button
-            type="button"
-            onClick={openCreate}
-            className="rounded-xl bg-teal-600 px-4 py-2.5 font-semibold text-white hover:bg-teal-500"
-          >
+          <button type="button" onClick={openCreate} className="ss-btn ss-btn-primary">
             + Add user
           </button>
         </div>
       </div>
-
-      {message && (
-        <div className="rounded-xl bg-teal-50 px-3 py-2 text-sm text-teal-800">{message}</div>
-      )}
 
       <div className="overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm">
         <div className="border-b border-slate-100 px-4 py-3 text-xs text-slate-500">
@@ -288,7 +271,7 @@ export function AdminUsers() {
               </tr>
             </thead>
             <tbody>
-              {filtered.map((u) => (
+              {slice.map((u) => (
                 <tr key={u.id}>
                   <td>
                     <div className="flex items-center gap-3">
@@ -300,7 +283,9 @@ export function AdminUsers() {
                       </div>
                     </div>
                   </td>
-                  <td className="center"><span className="ss-badge ss-badge-info">{u.role}</span></td>
+                  <td className="center">
+                    <span className="ss-badge ss-badge-info">{u.role}</span>
+                  </td>
                   <td className="center">
                     <span className={`ss-badge ${u.email_verified ? 'ss-badge-ok' : 'ss-badge-warn'}`}>
                       {u.email_verified ? 'Verified' : 'Unverified'}
@@ -311,133 +296,117 @@ export function AdminUsers() {
                   </td>
                   <td className="center">
                     <div className="flex flex-wrap justify-center gap-2">
-                      <button type="button" className="rounded-lg bg-sky-600 px-2.5 py-1.5 text-xs font-bold text-white hover:bg-sky-500" onClick={() => openEdit(u)}>Edit</button>
-                      <button type="button" className="rounded-lg bg-emerald-600 px-2.5 py-1.5 text-xs font-bold text-white hover:bg-emerald-500" onClick={() => setStatus(u.id, 'APPROVED')}>Approve</button>
-                      <button type="button" className="rounded-lg bg-amber-500 px-2.5 py-1.5 text-xs font-bold text-white hover:bg-amber-400" onClick={() => setStatus(u.id, 'SUSPENDED')}>Suspend</button>
-                      <button type="button" className="rounded-lg bg-orange-600 px-2.5 py-1.5 text-xs font-bold text-white hover:bg-orange-500" onClick={() => setStatus(u.id, 'REJECTED')}>Reject</button>
-                      <button type="button" className="rounded-lg bg-red-600 px-2.5 py-1.5 text-xs font-bold text-white hover:bg-red-500" onClick={() => deleteUser(u.id)}>Delete</button>
+                      <button type="button" className="ss-btn ss-btn-ghost" onClick={() => openEdit(u)}>
+                        Edit
+                      </button>
+                      <button type="button" className="ss-btn ss-btn-primary" onClick={() => setStatus(u.id, 'APPROVED')}>
+                        Approve
+                      </button>
+                      <button type="button" className="ss-btn ss-btn-ghost" onClick={() => setStatus(u.id, 'SUSPENDED')}>
+                        Suspend
+                      </button>
+                      <button type="button" className="ss-btn ss-btn-ghost" onClick={() => setStatus(u.id, 'REJECTED')}>
+                        Reject
+                      </button>
+                      <button type="button" className="ss-btn ss-btn-dark" onClick={() => deleteUser(u.id)}>
+                        Delete
+                      </button>
                     </div>
                   </td>
                 </tr>
               ))}
-              {!filtered.length && (
+              {!slice.length && (
                 <tr>
-                  <td colSpan={5} className="center text-slate-400">No users match your search</td>
+                  <td colSpan={5} className="center text-slate-400">
+                    No users match your search
+                  </td>
                 </tr>
               )}
             </tbody>
           </table>
         </div>
+        <Pagination page={page} pages={pages} total={total} onChange={setPage} label="users" />
       </div>
 
-      {open && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/60 p-4">
-          <div className="w-full max-w-lg rounded-3xl bg-white p-6 shadow-2xl">
-            <div className="mb-4 flex items-center justify-between">
-              <h3 className="font-display text-2xl font-bold">{editingUser ? 'Edit user' : 'Add new user'}</h3>
-              <button type="button" onClick={() => setOpen(false)} className="text-sm text-slate-500">Close</button>
-            </div>
-
-            <form className="space-y-4" onSubmit={createUser}>
-              <div className="grid gap-4 md:grid-cols-2">
-                <label className="block text-sm font-medium md:col-span-2">
-                  Full name
-                  <input
-                    required
-                    name="fullName"
-                    value={form.fullName}
-                    onChange={handleChange}
-                    className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2.5"
-                    placeholder="John Doe"
-                  />
-                </label>
-
-                <label className="block text-sm font-medium md:col-span-2">
-                  Email
-                  <input
-                    required
-                    type="email"
-                    name="email"
-                    value={form.email}
-                    onChange={handleChange}
-                    className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2.5"
-                    placeholder="user@example.com"
-                  />
-                </label>
-                {!editingUser && (
-                  <label className="block text-sm font-medium md:col-span-2">
-                    Password
-                    <input
-                      required
-                      type="text"
-                      name="password"
-                      value={form.password}
-                      onChange={handleChange}
-                      className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2.5"
-                      placeholder="Password123!"
-                    />
-                  </label>
-                )}
-                <label className="block text-sm font-medium">
-                  Phone
-                  <input
-                    name="phone"
-                    value={form.phone}
-                    onChange={handleChange}
-                    className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2.5"
-                    placeholder="0788 000 000"
-                  />
-                </label>
-
-                <label className="block text-sm font-medium">
-                  Role
-                  <select
-                    name="role"
-                    value={form.role}
-                    onChange={handleChange}
-                    className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2.5"
-                  >
-                    <option value="CASHIER">Cashier</option>
-                    <option value="MANAGER">Manager</option>
-                    <option value="ADMIN">Admin</option>
-                  </select>
-                </label>
-
-                <label className="block text-sm font-medium">
-                  Supermarket ID (optional)
-                  <input
-                    name="supermarketId"
-                    value={form.supermarketId}
-                    onChange={handleChange}
-                    className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2.5"
-                    placeholder="UUID if needed"
-                  />
-                </label>
-
-                <label className="block text-sm font-medium">
-                  Branch ID (optional)
-                  <input
-                    name="branchId"
-                    value={form.branchId}
-                    onChange={handleChange}
-                    className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2.5"
-                    placeholder="UUID if needed"
-                  />
-                </label>
-              </div>
-
-              <div className="flex justify-end gap-3 pt-2">
-                <button type="button" onClick={() => setOpen(false)} className="rounded-xl border border-slate-200 px-4 py-2 font-semibold">
-                  Cancel
-                </button>
-                <button type="submit" disabled={saving} className="rounded-xl bg-slate-900 px-4 py-2 font-semibold text-white disabled:opacity-60">
-                  {saving ? 'Saving...' : editingUser ? 'Update user' : 'Create user'}
-                </button>
-              </div>
-            </form>
+      <Modal open={open} title={editingUser ? 'Edit user' : 'Add new user'} onClose={() => setOpen(false)}>
+        <form className="space-y-3" onSubmit={saveUser}>
+          <label className="block text-sm font-medium text-slate-700">
+            Full name
+            <input
+              required
+              name="fullName"
+              value={form.fullName}
+              onChange={handleChange}
+              className="field-input mt-1"
+              placeholder="John Doe"
+            />
+          </label>
+          <label className="block text-sm font-medium text-slate-700">
+            Email
+            <input
+              required
+              type="email"
+              name="email"
+              value={form.email}
+              onChange={handleChange}
+              className="field-input mt-1"
+              placeholder="user@example.com"
+            />
+          </label>
+          <label className="block text-sm font-medium text-slate-700">
+            Phone
+            <input
+              name="phone"
+              value={form.phone}
+              onChange={handleChange}
+              className="field-input mt-1"
+              placeholder="0788 000 000"
+            />
+          </label>
+          {!editingUser && (
+            <label className="block text-sm font-medium text-slate-700">
+              Password
+              <input
+                required
+                type="text"
+                name="password"
+                value={form.password}
+                onChange={handleChange}
+                className="field-input mt-1"
+                placeholder="Password123!"
+              />
+            </label>
+          )}
+          <label className="block text-sm font-medium text-slate-700">
+            Role
+            <select name="role" value={form.role} onChange={handleChange} className="field-input mt-1">
+              <option value="CASHIER">Cashier</option>
+              <option value="MANAGER">Manager</option>
+              <option value="ADMIN">Admin</option>
+            </select>
+          </label>
+          {needsMarket && (
+            <label className="block text-sm font-medium text-slate-700">
+              Supermarket ID
+              <input
+                name="supermarketId"
+                value={form.supermarketId}
+                onChange={handleChange}
+                className="field-input mt-1"
+                placeholder="UUID"
+              />
+            </label>
+          )}
+          <div className="flex flex-col-reverse gap-2 pt-2 sm:flex-row sm:justify-end">
+            <button type="button" onClick={() => setOpen(false)} className="ss-btn ss-btn-ghost">
+              Cancel
+            </button>
+            <button type="submit" disabled={saving} className="ss-btn ss-btn-dark disabled:opacity-60">
+              {saving ? 'Saving…' : editingUser ? 'Update user' : 'Create user'}
+            </button>
           </div>
-        </div>
-      )}
+        </form>
+      </Modal>
     </div>
   );
 }
