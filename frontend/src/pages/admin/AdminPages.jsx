@@ -1,6 +1,5 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { jsPDF } from 'jspdf';
 import {
   LayoutDashboard,
   Users,
@@ -19,9 +18,11 @@ import api, { formatRwf } from '../../lib/api';
 import { useAuth } from '../../lib/auth';
 import { Modal, Pagination, usePagination, useToast } from '../../lib/ui';
 import { ManagerProducts, ManagerSupermarket } from '../staff/StaffPages';
+import { ReportWorkspace } from '../shared/ReportWorkspace';
 
 const links = [
   { to: '/admin/dashboard', label: 'Dashboard', icon: <LayoutDashboard className="h-4 w-4" /> },
+  { to: '/admin/reports', label: 'System Reports', icon: <FileText className="h-4 w-4" /> },
   { to: '/admin/users', label: 'Users / Approvals', icon: <Users className="h-4 w-4" /> },
   { to: '/admin/pin-requests', label: 'PIN Approvals', icon: <CreditCard className="h-4 w-4" /> },
   { to: '/admin/supermarkets', label: 'Supermarkets', icon: <Store className="h-4 w-4" /> },
@@ -46,26 +47,6 @@ export function AdminDashboard() {
     api.get('/admin/stats').then((r) => setStats(r.data.data)).catch(() => {});
   };
 
-  const exportPdfReport = () => {
-    const doc = new jsPDF();
-    doc.setFontSize(18);
-    doc.text('SMARTSCAN Admin Report', 14, 18);
-    doc.setFontSize(11);
-    const rows = [
-      ['Users', String(stats?.users ?? 0)],
-      ['Pending approvals', String(stats?.pendingApprovals ?? 0)],
-      ['Pending PIN approvals', String(stats?.pendingPinApprovals ?? 0)],
-      ['Supermarkets', String(stats?.supermarkets ?? 0)],
-      ['Products', String(stats?.products ?? 0)],
-      ['Sessions', String(stats?.shopping_sessions ?? 0)],
-      ['Payments', String(stats?.payments ?? 0)],
-    ];
-    rows.forEach(([label, value], index) => {
-      doc.text(`${label}: ${value}`, 14, 38 + index * 8);
-    });
-    doc.save('smartscan-admin-report.pdf');
-  };
-
   useEffect(() => {
     loadStats();
   }, []);
@@ -80,41 +61,37 @@ export function AdminDashboard() {
     };
   }, [socket]);
 
-  const cards = [
-    { label: 'Users', value: stats?.users, to: '/admin/users', tone: 'bg-sky-600' },
-    { label: 'Pending approvals', value: stats?.pendingApprovals, to: '/admin/users', tone: 'bg-amber-500' },
-    { label: 'Pending PIN approvals', value: stats?.pendingPinApprovals, to: '/admin/pin-requests', tone: 'bg-orange-600' },
-    { label: 'Supermarkets', value: stats?.supermarkets, to: '/admin/supermarkets', tone: 'bg-teal-600' },
-    { label: 'Products', value: stats?.products, to: '/admin/products', tone: 'bg-indigo-600' },
-    { label: 'Sessions', value: stats?.shopping_sessions, to: '/admin/sessions', tone: 'bg-slate-800' },
-    { label: 'Payments', value: stats?.payments, to: '/admin/payments', tone: 'bg-emerald-600' },
+  const statusCards = [
+    { label: 'Users', value: stats?.users, tone: 'border-sky-200 bg-sky-50 text-sky-900' },
+    { label: 'Pending approvals', value: stats?.pendingApprovals, tone: 'border-amber-200 bg-amber-50 text-amber-900' },
+    { label: 'Pending PIN', value: stats?.pendingPinApprovals, tone: 'border-orange-200 bg-orange-50 text-orange-900' },
+    { label: 'Supermarkets', value: stats?.supermarkets, tone: 'border-teal-200 bg-teal-50 text-teal-900' },
+    { label: 'Products', value: stats?.products, tone: 'border-indigo-200 bg-indigo-50 text-indigo-900' },
+    { label: 'Sessions', value: stats?.shopping_sessions, tone: 'border-slate-200 bg-slate-50 text-slate-900' },
+    { label: 'Payments', value: stats?.payments, tone: 'border-emerald-200 bg-emerald-50 text-emerald-900' },
+    { label: 'Receipts', value: stats?.receipts, tone: 'border-cyan-200 bg-cyan-50 text-cyan-900' },
   ];
+
   return (
     <div className="space-y-4">
-      <div className="flex flex-wrap items-center justify-between gap-3 rounded-3xl bg-slate-900 p-5 text-white">
-        <div>
-          <h2 className="font-display text-2xl font-bold">Admin management</h2>
-          <p className="mt-1 text-sm text-slate-300">Color-coded actions — click any card to open that workspace.</p>
-        </div>
-        <button type="button" onClick={exportPdfReport} className="rounded-xl bg-white px-4 py-2 font-semibold text-slate-900 hover:bg-slate-100">
-          Export PDF report
-        </button>
+      <div className="rounded-3xl bg-slate-900 p-5 text-white sm:p-6">
+        <h2 className="font-display text-2xl font-bold">System status</h2>
+        <p className="mt-1 text-sm text-slate-300">Live platform counts. Full reports are in System Reports.</p>
       </div>
-      <div className="grid gap-4 md:grid-cols-3">
-        {cards.map((card) => (
-          <Link
-            key={card.label}
-            to={card.to}
-            className={`rounded-2xl p-5 text-white shadow-sm transition hover:-translate-y-0.5 hover:shadow-md ${card.tone}`}
-          >
-            <div className="text-xs uppercase tracking-wide text-white/80">{card.label}</div>
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        {statusCards.map((card) => (
+          <div key={card.label} className={`rounded-2xl border p-4 shadow-sm ${card.tone}`}>
+            <div className="text-xs font-semibold uppercase tracking-wide opacity-70">{card.label}</div>
             <div className="mt-1 font-display text-3xl font-bold">{card.value ?? '—'}</div>
-            <div className="mt-3 text-xs font-bold uppercase tracking-wide text-white/90">Open →</div>
-          </Link>
+          </div>
         ))}
       </div>
     </div>
   );
+}
+
+export function AdminReports() {
+  return <ReportWorkspace roleLabel="Admin" />;
 }
 
 const emptyUserForm = {

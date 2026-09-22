@@ -40,6 +40,7 @@ import {
 import {
   AdminShell,
   AdminDashboard,
+  AdminReports,
   AdminUsers,
   AdminPinRequests,
   AdminSupermarkets,
@@ -108,6 +109,7 @@ export default function App() {
           <Route element={<ProtectedRoute roles={['ADMIN']} />}>
             <Route path="/admin" element={<AdminShell />}>
               <Route path="dashboard" element={<AdminDashboard />} />
+              <Route path="reports" element={<AdminReports />} />
               <Route path="users" element={<AdminUsers />} />
               <Route path="pin-requests" element={<AdminPinRequests />} />
               <Route path="supermarkets" element={<AdminSupermarkets />} />

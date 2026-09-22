@@ -399,3 +399,176 @@ exports.reviewPinRequest = async (req, res) => {
     return res.status(500).json({ success: false, message: err.message });
   }
 };
+
+exports.systemReport = async (req, res) => {
+  try {
+    const role = req.user.role;
+    const supermarketId = req.user.supermarketId;
+    const generatedAt = new Date().toISOString();
+
+    if (role === 'ADMIN') {
+      const countOf = async (table, filters = {}) => {
+        let q = supabase.from(table).select('*', { count: 'exact', head: true });
+        Object.entries(filters).forEach(([k, v]) => {
+          q = q.eq(k, v);
+        });
+        const { count } = await q;
+        return count || 0;
+      };
+
+      const [
+        users,
+        pendingUsers,
+        supermarkets,
+        products,
+        sessions,
+        activeSessions,
+        payments,
+        receipts,
+        devices,
+        cards,
+        deposits,
+      ] = await Promise.all([
+        countOf('users'),
+        countOf('users', { account_status: 'PENDING_APPROVAL' }),
+        countOf('supermarkets'),
+        countOf('products'),
+        countOf('shopping_sessions'),
+        countOf('shopping_sessions', { status: 'ACTIVE' }),
+        countOf('payments'),
+        countOf('receipts'),
+        countOf('iot_devices'),
+        countOf('customer_cards'),
+        supabase
+          .from('card_transactions')
+          .select('amount, type')
+          .eq('type', 'DEPOSIT')
+          .limit(5000)
+          .then(({ data }) => data || []),
+      ]);
+
+      const { data: paymentRows } = await supabase
+        .from('payments')
+        .select('amount, status, paid_at, payment_code, users!payments_customer_id_fkey(full_name, email)')
+        .eq('status', 'COMPLETED')
+        .order('paid_at', { ascending: false })
+        .limit(50);
+
+      const salesTotal = (paymentRows || []).reduce((s, p) => s + Number(p.amount || 0), 0);
+      const depositTotal = (deposits || []).reduce((s, d) => s + Number(d.amount || 0), 0);
+
+      const { data: markets } = await supabase
+        .from('supermarkets')
+        .select('id, name, status, address, created_at')
+        .order('created_at', { ascending: false })
+        .limit(30);
+
+      return res.json({
+        success: true,
+        data: {
+          scope: 'SYSTEM',
+          title: 'SMARTSCAN System Report',
+          generatedAt,
+          summary: {
+            users,
+            pendingUsers,
+            supermarkets,
+            products,
+            sessions,
+            activeSessions,
+            payments,
+            receipts,
+            devices,
+            cards,
+            salesTotal,
+            depositTotal,
+          },
+          recentPayments: paymentRows || [],
+          supermarketsList: markets || [],
+        },
+      });
+    }
+
+    if (role === 'MANAGER') {
+      if (!supermarketId) {
+        return res.status(400).json({ success: false, message: 'Manager has no supermarket assigned' });
+      }
+
+      const { data: market } = await supabase
+        .from('supermarkets')
+        .select('id, name, address, status')
+        .eq('id', supermarketId)
+        .maybeSingle();
+
+      const { count: products } = await supabase
+        .from('products')
+        .select('*', { count: 'exact', head: true })
+        .eq('supermarket_id', supermarketId);
+
+      const { count: activeSessions } = await supabase
+        .from('shopping_sessions')
+        .select('*', { count: 'exact', head: true })
+        .eq('supermarket_id', supermarketId)
+        .eq('status', 'ACTIVE');
+
+      const { count: sessions } = await supabase
+        .from('shopping_sessions')
+        .select('*', { count: 'exact', head: true })
+        .eq('supermarket_id', supermarketId);
+
+      const { data: payments } = await supabase
+        .from('payments')
+        .select(
+          'id, payment_code, amount, status, paid_at, users!payments_customer_id_fkey(full_name, email), shopping_sessions!inner(session_code, supermarket_id)'
+        )
+        .eq('shopping_sessions.supermarket_id', supermarketId)
+        .eq('status', 'COMPLETED')
+        .order('paid_at', { ascending: false })
+        .limit(100);
+
+      const { data: receipts } = await supabase
+        .from('receipts')
+        .select('receipt_number, total_amount, status, created_at')
+        .eq('supermarket_id', supermarketId)
+        .order('created_at', { ascending: false })
+        .limit(50);
+
+      const { data: storeSessions } = await supabase
+        .from('shopping_sessions')
+        .select('customer_id, status, payment_status, total_amount, started_at, session_code, users!shopping_sessions_customer_id_fkey(full_name, email)')
+        .eq('supermarket_id', supermarketId)
+        .order('started_at', { ascending: false })
+        .limit(50);
+
+      const salesTotal = (payments || []).reduce((s, p) => s + Number(p.amount || 0), 0);
+      const customers = new Set((storeSessions || []).map((s) => s.customer_id).filter(Boolean)).size;
+
+      return res.json({
+        success: true,
+        data: {
+          scope: 'SUPERMARKET',
+          title: `SMARTSCAN Store Report — ${market?.name || 'Supermarket'}`,
+          generatedAt,
+          supermarket: market,
+          summary: {
+            products: products || 0,
+            sessions: sessions || 0,
+            activeSessions: activeSessions || 0,
+            payments: (payments || []).length,
+            receipts: (receipts || []).length,
+            customers,
+            salesTotal,
+          },
+          recentPayments: payments || [],
+          recentReceipts: receipts || [],
+          recentSessions: storeSessions || [],
+        },
+      });
+    }
+
+    return res.status(403).json({ success: false, message: 'Reports available for admin and manager only' });
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({ success: false, message: err.message });
+  }
+};

@@ -37,6 +37,7 @@ receiptRouter.get('/:id', requireAuth, exitCtrl.getReceipt);
 
 const adminRouter = express.Router();
 adminRouter.get('/stats', requireAuth, adminCtrl.dashboardStats);
+adminRouter.get('/reports/system', requireAuth, requireRole('ADMIN', 'MANAGER'), adminCtrl.systemReport);
 adminRouter.get('/users', requireAuth, requireRole('ADMIN', 'MANAGER'), adminCtrl.listUsers);
 adminRouter.patch('/users/:id', requireAuth, requireRole('ADMIN'), adminCtrl.updateUser);
 adminRouter.patch('/users/:id/status', requireAuth, requireRole('ADMIN'), adminCtrl.approveUser);

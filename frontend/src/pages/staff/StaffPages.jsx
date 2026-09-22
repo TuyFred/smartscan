@@ -18,6 +18,7 @@ import DashboardLayout from '../../components/DashboardLayout';
 import api, { formatRwf } from '../../lib/api';
 import { useAuth } from '../../lib/auth';
 import { Modal, Pagination, pickCard, usePagination, useToast } from '../../lib/ui';
+import { ReportWorkspace } from '../shared/ReportWorkspace';
 
 export {
   CashierShell,
@@ -46,12 +47,10 @@ export function ManagerShell() {
 
 export function ManagerDashboard() {
   const [stats, setStats] = useState(null);
-  const [sessions, setSessions] = useState([]);
   const { socket } = useAuth();
 
   const loadDashboard = () => {
     api.get('/admin/stats').then((r) => setStats(r.data.data)).catch(() => {});
-    api.get('/sessions?status=ACTIVE').then((r) => setSessions(r.data.data || [])).catch(() => {});
   };
 
   useEffect(() => {
@@ -68,48 +67,28 @@ export function ManagerDashboard() {
     };
   }, [socket]);
 
-  const actions = [
-    { to: '/manager/sessions', title: 'Active sessions', text: 'Watch live carts and totals', tone: 'bg-sky-600 hover:bg-sky-500', icon: ShoppingBag },
-    { to: '/manager/products', title: 'Products', text: 'Add stock and QR labels', tone: 'bg-teal-600 hover:bg-teal-500', icon: Package },
-    { to: '/manager/customers', title: 'Store customers', text: 'Only shoppers of this supermarket', tone: 'bg-indigo-600 hover:bg-indigo-500', icon: Users },
-    { to: '/manager/payments', title: 'Payments', text: 'Paid sessions and amounts', tone: 'bg-emerald-600 hover:bg-emerald-500', icon: CreditCard },
-    { to: '/manager/supermarket', title: 'My supermarket', text: 'Branches and store QR', tone: 'bg-amber-600 hover:bg-amber-500', icon: Store },
-    { to: '/manager/devices', title: 'Devices', text: 'RFID / exit gate status', tone: 'bg-slate-800 hover:bg-slate-700', icon: Shield },
+  const statusCards = [
+    { label: 'Active sessions', value: stats?.activeSessions || 0, tone: 'border-sky-200 bg-sky-50 text-sky-900' },
+    { label: 'Products', value: stats?.products || 0, tone: 'border-teal-200 bg-teal-50 text-teal-900' },
+    { label: 'Store customers', value: stats?.customers || 0, tone: 'border-indigo-200 bg-indigo-50 text-indigo-900' },
+    { label: 'Sales total', value: formatRwf(stats?.salesTotal || 0), tone: 'border-emerald-200 bg-emerald-50 text-emerald-900' },
+    { label: 'Payments', value: stats?.paymentsCount || 0, tone: 'border-amber-200 bg-amber-50 text-amber-900' },
   ];
 
   return (
-    <div className="space-y-6">
-      <div className="rounded-3xl bg-slate-900 p-6 text-white">
-        <h2 className="font-display text-2xl font-bold">Manager control desk</h2>
-        <p className="mt-2 max-w-2xl text-sm text-slate-300">
-          Track your store only. Each action button below is color-coded by task.
-        </p>
+    <div className="space-y-4">
+      <div className="rounded-3xl bg-slate-900 p-5 text-white sm:p-6">
+        <h2 className="font-display text-2xl font-bold">Store status</h2>
+        <p className="mt-1 text-sm text-slate-300">Live supermarket counts only. Full reports are in Reports.</p>
       </div>
-      <div className="grid gap-4 md:grid-cols-4">
-        <Stat label="Active sessions" value={stats?.activeSessions || 0} />
-        <Stat label="Products" value={stats?.products || 0} />
-        <Stat label="Store customers" value={stats?.customers || 0} />
-        <Stat label="Sales total" value={formatRwf(stats?.salesTotal || 0)} />
-      </div>
-      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-        {actions.map((item) => (
-          <Link
-            key={item.to}
-            to={item.to}
-            className={`group flex items-start gap-3 rounded-2xl px-4 py-4 text-white shadow-sm transition ${item.tone}`}
-          >
-            <item.icon className="mt-0.5 h-6 w-6 shrink-0 opacity-90" />
-            <div>
-              <div className="font-display text-lg font-bold">{item.title}</div>
-              <p className="mt-1 text-sm text-white/80">{item.text}</p>
-              <span className="mt-3 inline-block text-xs font-semibold uppercase tracking-wide text-white/90 group-hover:underline">
-                Open →
-              </span>
-            </div>
-          </Link>
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
+        {statusCards.map((card) => (
+          <div key={card.label} className={`rounded-2xl border p-4 shadow-sm ${card.tone}`}>
+            <div className="text-xs font-semibold uppercase tracking-wide opacity-70">{card.label}</div>
+            <div className="mt-1 font-display text-2xl font-bold">{card.value}</div>
+          </div>
         ))}
       </div>
-      <SessionsTable rows={sessions} paginate />
     </div>
   );
 }
@@ -860,15 +839,5 @@ export function ManagerSupermarket() {
 }
 
 export function ManagerReports() {
-  const [stats, setStats] = useState(null);
-  useEffect(() => {
-    api.get('/admin/stats').then((r) => setStats(r.data.data));
-  }, []);
-  return (
-    <div className="rounded-2xl bg-white p-6 shadow-sm">
-      <h3 className="font-display text-xl font-bold">Sales snapshot</h3>
-      <p className="mt-2 text-3xl font-bold text-teal-700">{formatRwf(stats?.salesTotal || 0)}</p>
-      <p className="text-sm text-slate-500">{stats?.paymentsCount || 0} completed payments</p>
-    </div>
-  );
+  return <ReportWorkspace roleLabel="Manager" />;
 }
