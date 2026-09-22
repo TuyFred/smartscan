@@ -434,51 +434,100 @@ export function ManagerProducts() {
 
 export function ManagerCustomers() {
   const [rows, setRows] = useState([]);
+  const [q, setQ] = useState('');
+  const [loading, setLoading] = useState(true);
+
   useEffect(() => {
-    api.get('/cards/store-customers').then((r) => setRows(r.data.data || []));
+    let cancelled = false;
+    (async () => {
+      setLoading(true);
+      try {
+        const { data } = await api.get('/cards/store-customers');
+        if (!cancelled) setRows(data.data || []);
+      } catch {
+        if (!cancelled) setRows([]);
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+    return () => { cancelled = true; };
   }, []);
+
+  const needle = q.trim().toLowerCase();
+  const filtered = !needle
+    ? rows
+    : rows.filter((u) => {
+        const blob = `${u.full_name || ''} ${u.email || ''} ${u.phone || ''} ${u.customer_cards?.[0]?.card_uid || ''}`.toLowerCase();
+        return blob.includes(needle);
+      });
+
   return (
     <div className="space-y-3">
-      <div>
-        <h2 className="font-display text-xl font-bold">Store customers</h2>
-        <p className="text-sm text-slate-500">
-          Only shoppers who started a session or bought in your supermarket appear here.
-        </p>
-      </div>
-      <div className="overflow-hidden rounded-2xl bg-white shadow-sm">
+      <div className="overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm">
+        <div className="flex flex-col gap-3 border-b border-slate-100 p-5 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <h2 className="font-display text-xl font-bold">Store customers</h2>
+            <p className="text-sm text-slate-500">
+              Only shoppers who bought in your supermarket. Live filter as you type.
+            </p>
+          </div>
+          <div className="ss-search max-w-md">
+            <Search className="ss-search-icon h-4 w-4" />
+            <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Filter name, email, phone, UID…" />
+          </div>
+        </div>
         <div className="table-wrap">
-          <table className="w-full text-sm">
-            <thead className="bg-slate-50 text-xs uppercase text-slate-500">
+          <table className="ss-table">
+            <thead>
               <tr>
-                <th className="px-4 py-3 text-left">Customer</th>
-                <th className="px-4 py-3">Card</th>
-                <th className="px-4 py-3">Balance</th>
-                <th className="px-4 py-3">Visits</th>
-                <th className="px-4 py-3">Spent here</th>
-                <th className="px-4 py-3">Last visit</th>
+                <th>Customer</th>
+                <th>Card</th>
+                <th className="center">Balance</th>
+                <th className="center">Visits</th>
+                <th className="center">Spent here</th>
+                <th className="center">Last visit</th>
               </tr>
             </thead>
             <tbody>
-              {rows.map((u) => (
-                <tr key={u.id} className="border-t">
-                  <td className="px-4 py-3">
-                    <div className="font-medium">{u.full_name}</div>
-                    <div className="text-xs text-slate-400">{u.email}</div>
-                    <div className="text-xs text-slate-400">{u.phone}</div>
-                  </td>
-                  <td className="px-4 py-3 text-center">{u.customer_cards?.[0]?.card_uid || '—'}</td>
-                  <td className="px-4 py-3 text-center font-semibold">{formatRwf(u.customer_cards?.[0]?.balance || 0)}</td>
-                  <td className="px-4 py-3 text-center">{u.visits || 0}</td>
-                  <td className="px-4 py-3 text-center font-semibold">{formatRwf(u.totalSpent || 0)}</td>
-                  <td className="px-4 py-3 text-center text-xs">
-                    {u.lastVisit ? new Date(u.lastVisit).toLocaleString() : '—'}
-                  </td>
-                </tr>
-              ))}
-              {!rows.length && (
+              {loading && <tr><td colSpan={6} className="center text-slate-400">Loading…</td></tr>}
+              {!loading && filtered.map((u) => {
+                const card = u.customer_cards?.[0];
+                const hasCard = Boolean(card?.card_uid);
+                return (
+                  <tr key={u.id}>
+                    <td>
+                      <div className="flex items-center gap-3">
+                        <span className="ss-avatar">{(u.full_name || '?')[0]}</span>
+                        <div>
+                          <div className="font-semibold">{u.full_name}</div>
+                          <div className="text-xs text-slate-500">{u.email}</div>
+                          <div className="text-xs text-slate-400">{u.phone}</div>
+                        </div>
+                      </div>
+                    </td>
+                    <td>
+                      {hasCard ? (
+                        <div className="space-y-1">
+                          <span className="ss-uid">{card.card_uid}</span>
+                          <div><span className="ss-badge ss-badge-ok">Has card</span></div>
+                        </div>
+                      ) : (
+                        <span className="ss-badge ss-badge-warn">No card</span>
+                      )}
+                    </td>
+                    <td className="center font-semibold text-teal-800">{formatRwf(card?.balance || 0)}</td>
+                    <td className="center">{u.visits || 0}</td>
+                    <td className="center font-semibold">{formatRwf(u.totalSpent || 0)}</td>
+                    <td className="center text-xs text-slate-500">
+                      {u.lastVisit ? new Date(u.lastVisit).toLocaleString() : '—'}
+                    </td>
+                  </tr>
+                );
+              })}
+              {!loading && !filtered.length && (
                 <tr>
-                  <td colSpan={6} className="px-4 py-8 text-center text-slate-400">
-                    No customers have shopped in this supermarket yet.
+                  <td colSpan={6} className="center text-slate-400">
+                    No customers match your filter.
                   </td>
                 </tr>
               )}
@@ -697,29 +746,149 @@ export function CashierShell() {
 }
 
 export function CashierDashboard() {
+  const [rows, setRows] = useState([]);
+  const [q, setQ] = useState('');
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    let cancelled = false;
+    const timer = setTimeout(async () => {
+      setLoading(true);
+      try {
+        const { data } = await api.get(`/cards/customers?limit=200&q=${encodeURIComponent(q)}`);
+        if (!cancelled) setRows(data.data || []);
+      } catch {
+        if (!cancelled) setRows([]);
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    }, q ? 280 : 0);
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }, [q]);
+
+  const withCard = rows.filter((u) => u.customer_cards?.[0]?.card_uid).length;
+  const noCard = rows.length - withCard;
+
   return (
     <div className="space-y-5">
       <div className="rounded-3xl bg-slate-900 p-6 text-white">
         <h2 className="font-display text-2xl font-bold">Cashier desk</h2>
         <p className="mt-2 max-w-2xl text-sm text-slate-300">
-          Sell RFID cards, add money, and help shoppers. Only a card registered to the shopping customer can pay — money is never taken from another person&apos;s card.
+          Search customers instantly. See who already has an RFID card, their UID, and balance before you sell or deposit.
         </p>
       </div>
-      <div className="grid gap-4 md:grid-cols-2">
+
+      <div className="grid gap-3 sm:grid-cols-3">
+        <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+          <div className="text-xs font-semibold uppercase tracking-wide text-slate-400">Showing</div>
+          <div className="mt-1 font-display text-2xl font-bold">{rows.length}</div>
+        </div>
+        <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-4 shadow-sm">
+          <div className="text-xs font-semibold uppercase tracking-wide text-emerald-700">Have card</div>
+          <div className="mt-1 font-display text-2xl font-bold text-emerald-800">{withCard}</div>
+        </div>
+        <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4 shadow-sm">
+          <div className="text-xs font-semibold uppercase tracking-wide text-amber-700">Need card</div>
+          <div className="mt-1 font-display text-2xl font-bold text-amber-900">{noCard}</div>
+        </div>
+      </div>
+
+      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
         {[
-          { to: '/cashier/sell-card', title: 'Sell RFID card', text: 'Issue one physical UID to one customer. Blocks already-taken cards.', icon: CreditCard, tone: 'border-teal-300 hover:bg-teal-50' },
-          { to: '/cashier/deposits', title: 'Add money', text: 'Deposit cash onto a customer card by name or card UID.', icon: Banknote, tone: 'border-emerald-300 hover:bg-emerald-50' },
-          { to: '/cashier/customers', title: 'All customers', text: 'See every shopper, card UID, and balance at a glance.', icon: Users, tone: 'border-sky-300 hover:bg-sky-50' },
-          { to: '/cashier/help', title: 'Help a customer', text: 'Look up a shopper, check balance, and guide them through shopping.', icon: LifeBuoy, tone: 'border-amber-300 hover:bg-amber-50' },
-          { to: '/cashier/rfid', title: 'Read RFID', text: 'Tap or type a card UID to identify the customer at the desk.', icon: Shield, tone: 'border-indigo-300 hover:bg-indigo-50' },
+          { to: '/cashier/sell-card', title: 'Sell RFID card', text: 'Issue one UID to one customer', icon: CreditCard, tone: 'bg-teal-600 hover:bg-teal-500' },
+          { to: '/cashier/deposits', title: 'Add money', text: 'Deposit cash onto a card', icon: Banknote, tone: 'bg-emerald-600 hover:bg-emerald-500' },
+          { to: '/cashier/customers', title: 'Full customer list', text: 'Browse every shopper', icon: Users, tone: 'bg-sky-600 hover:bg-sky-500' },
+          { to: '/cashier/help', title: 'Help customer', text: 'Guide shopping & balance', icon: LifeBuoy, tone: 'bg-amber-600 hover:bg-amber-500' },
+          { to: '/cashier/rfid', title: 'Read RFID', text: 'Live card tap lookup', icon: Shield, tone: 'bg-indigo-600 hover:bg-indigo-500' },
         ].map((item) => (
-          <Link key={item.to} to={item.to} className={`rounded-2xl border-2 bg-white p-5 shadow-sm transition ${item.tone}`}>
-            <item.icon className="h-6 w-6 text-slate-800" />
-            <div className="mt-3 font-display text-lg font-bold">{item.title}</div>
-            <p className="mt-1 text-sm text-slate-500">{item.text}</p>
-            <span className="mt-3 inline-block text-xs font-bold uppercase tracking-wide text-slate-700">Open →</span>
+          <Link key={item.to} to={item.to} className={`rounded-2xl px-4 py-4 text-white shadow-sm transition ${item.tone}`}>
+            <item.icon className="h-5 w-5 opacity-90" />
+            <div className="mt-2 font-display text-base font-bold">{item.title}</div>
+            <p className="mt-0.5 text-xs text-white/80">{item.text}</p>
           </Link>
         ))}
+      </div>
+
+      <div className="overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm">
+        <div className="flex flex-col gap-3 border-b border-slate-100 p-4 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <h3 className="font-display text-lg font-bold text-slate-900">Customers & cards</h3>
+            <p className="text-xs text-slate-500">Type to auto-filter by name, email, phone, or card UID</p>
+          </div>
+          <div className="ss-search max-w-md">
+            <Search className="ss-search-icon h-4 w-4" />
+            <input
+              value={q}
+              onChange={(e) => setQ(e.target.value)}
+              placeholder="Search customers or card UID…"
+              aria-label="Search customers"
+            />
+          </div>
+        </div>
+        <div className="table-wrap">
+          <table className="ss-table">
+            <thead>
+              <tr>
+                <th>Customer</th>
+                <th>Card UID</th>
+                <th className="center">Balance</th>
+                <th className="center">Card status</th>
+                <th className="center">Account</th>
+              </tr>
+            </thead>
+            <tbody>
+              {loading && (
+                <tr>
+                  <td colSpan={5} className="center text-slate-400">Refreshing results…</td>
+                </tr>
+              )}
+              {!loading && rows.map((u) => {
+                const card = u.customer_cards?.[0];
+                const hasCard = Boolean(card?.card_uid);
+                return (
+                  <tr key={u.id}>
+                    <td>
+                      <div className="flex items-center gap-3">
+                        {u.profile_image ? (
+                          <img src={u.profile_image} alt="" className="h-9 w-9 rounded-full object-cover" />
+                        ) : (
+                          <span className="ss-avatar">{(u.full_name || '?')[0]}</span>
+                        )}
+                        <div>
+                          <div className="font-semibold text-slate-900">{u.full_name}</div>
+                          <div className="text-xs text-slate-500">{u.email}</div>
+                          <div className="text-xs text-slate-400">{u.phone || 'No phone'}</div>
+                        </div>
+                      </div>
+                    </td>
+                    <td>
+                      {hasCard ? <span className="ss-uid">{card.card_uid}</span> : <span className="text-slate-400">Not issued</span>}
+                    </td>
+                    <td className="center font-semibold text-teal-800">{formatRwf(card?.balance || 0)}</td>
+                    <td className="center">
+                      <span className={`ss-badge ${hasCard ? 'ss-badge-ok' : 'ss-badge-warn'}`}>
+                        {hasCard ? 'Has card' : 'Needs card'}
+                      </span>
+                    </td>
+                    <td className="center">
+                      <span className={`ss-badge ${u.account_status === 'APPROVED' ? 'ss-badge-info' : 'ss-badge-muted'}`}>
+                        {u.account_status || '—'}
+                      </span>
+                    </td>
+                  </tr>
+                );
+              })}
+              {!loading && !rows.length && (
+                <tr>
+                  <td colSpan={5} className="center text-slate-400">No customers match “{q || 'all'}”</td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
       </div>
     </div>
   );
@@ -731,44 +900,47 @@ function CustomerSearch({ selected, onSelect, hint, autoLoad = true }) {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
 
-  const search = async (e) => {
-    e?.preventDefault();
-    setError('');
-    setLoading(true);
-    try {
-      const { data } = await api.get(`/cards/customers?limit=200&q=${encodeURIComponent(q)}`);
-      setCustomers(data.data || []);
-      if (!(data.data || []).length) setError('No matching customers');
-    } catch (err) {
-      setError(err.response?.data?.message || 'Search failed');
-    } finally {
-      setLoading(false);
-    }
-  };
-
   useEffect(() => {
-    if (autoLoad) search();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [autoLoad]);
+    if (!autoLoad && !q) return undefined;
+    let cancelled = false;
+    const timer = setTimeout(async () => {
+      setLoading(true);
+      setError('');
+      try {
+        const { data } = await api.get(`/cards/customers?limit=200&q=${encodeURIComponent(q)}`);
+        if (cancelled) return;
+        setCustomers(data.data || []);
+        if (!(data.data || []).length) setError(q ? `No match for “${q}”` : 'No customers found');
+      } catch (err) {
+        if (!cancelled) setError(err.response?.data?.message || 'Search failed');
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    }, q ? 280 : 0);
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }, [q, autoLoad]);
 
   return (
     <div className="space-y-3">
-      <form onSubmit={search} className="flex flex-col gap-2 rounded-2xl bg-white p-4 shadow-sm sm:flex-row">
-        <div className="relative flex-1">
-          <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+      <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+        <div className="ss-search">
+          <Search className="ss-search-icon h-4 w-4" />
           <input
             value={q}
             onChange={(e) => setQ(e.target.value)}
-            placeholder="Search name, email or phone"
-            className="w-full rounded-xl border py-2 pl-9 pr-3"
+            placeholder="Live search: name, email, phone, or card UID"
+            aria-label="Search customers"
           />
         </div>
-        <button type="submit" className="rounded-xl bg-sky-600 px-4 py-2 font-semibold text-white hover:bg-sky-500">
-          {loading ? 'Loading…' : 'Search / refresh'}
-        </button>
-      </form>
-      {hint && <p className="text-xs text-slate-500">{hint}</p>}
-      {error && <div className="rounded-xl bg-amber-50 px-3 py-2 text-sm text-amber-800">{error}</div>}
+        <div className="mt-2 flex items-center justify-between text-xs text-slate-500">
+          <span>{hint || 'Results refresh automatically as you type'}</span>
+          <span>{loading ? 'Searching…' : `${customers.length} result${customers.length === 1 ? '' : 's'}`}</span>
+        </div>
+      </div>
+      {error && !customers.length && <div className="rounded-xl bg-amber-50 px-3 py-2 text-sm text-amber-800">{error}</div>}
       <div className="grid gap-3 md:grid-cols-2">
         {customers.map((c) => {
           const card = c.customer_cards?.[0];
@@ -782,22 +954,23 @@ function CustomerSearch({ selected, onSelect, hint, autoLoad = true }) {
                 selected?.id === c.id ? 'border-teal-500 bg-teal-50 ring-2 ring-teal-200' : 'border-slate-200 bg-white'
               }`}
             >
-              <div className="flex items-start justify-between gap-2">
-                <div className="font-semibold">{c.full_name}</div>
-                <span
-                  className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-bold uppercase ${
-                    hasCard ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'
-                  }`}
-                >
-                  {hasCard ? 'Has card' : 'No card'}
-                </span>
+              <div className="flex items-start gap-3">
+                <span className="ss-avatar">{(c.full_name || '?')[0]}</span>
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="truncate font-semibold text-slate-900">{c.full_name}</div>
+                    <span className={`ss-badge ${hasCard ? 'ss-badge-ok' : 'ss-badge-warn'}`}>
+                      {hasCard ? 'Has card' : 'Needs card'}
+                    </span>
+                  </div>
+                  <div className="truncate text-sm text-slate-500">{c.email}</div>
+                  <div className="text-xs text-slate-400">{c.phone || 'No phone'}</div>
+                  <div className="mt-2">
+                    {hasCard ? <span className="ss-uid">{card.card_uid}</span> : <span className="text-xs text-slate-400">No RFID card yet</span>}
+                  </div>
+                  <div className="mt-1 text-sm font-semibold text-teal-800">Balance: {formatRwf(card?.balance || 0)}</div>
+                </div>
               </div>
-              <div className="text-sm text-slate-500">{c.email}</div>
-              <div className="text-xs text-slate-400">{c.phone || 'No phone'}</div>
-              <div className="mt-2 rounded-xl bg-slate-50 px-2.5 py-1.5 font-mono text-xs text-slate-700">
-                UID: {card?.card_uid || '— not issued —'}
-              </div>
-              <div className="mt-1 text-sm font-semibold text-teal-800">Balance: {formatRwf(card?.balance || 0)}</div>
             </button>
           );
         })}
@@ -1085,64 +1258,84 @@ export function CashierDeposits() {
 export function CashierCustomers() {
   const [rows, setRows] = useState([]);
   const [q, setQ] = useState('');
-  const load = () => api.get(`/cards/customers?limit=200&q=${encodeURIComponent(q)}`).then((r) => setRows(r.data.data || []));
-  useEffect(() => { load(); }, []);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    let cancelled = false;
+    const timer = setTimeout(async () => {
+      setLoading(true);
+      try {
+        const { data } = await api.get(`/cards/customers?limit=200&q=${encodeURIComponent(q)}`);
+        if (!cancelled) setRows(data.data || []);
+      } catch {
+        if (!cancelled) setRows([]);
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    }, q ? 280 : 0);
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }, [q]);
+
   return (
     <div className="space-y-4">
-      <div className="flex flex-col gap-3 rounded-2xl bg-white p-4 shadow-sm sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <h2 className="font-display text-xl font-bold">All customers</h2>
-          <p className="text-sm text-slate-500">See who has a card, UID, and balance before selling or depositing.</p>
+      <div className="overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm">
+        <div className="flex flex-col gap-3 border-b border-slate-100 p-5 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <h2 className="font-display text-xl font-bold">All customers</h2>
+            <p className="text-sm text-slate-500">Live search refreshes as you type — name, email, phone, or card UID.</p>
+          </div>
+          <div className="ss-search max-w-md">
+            <Search className="ss-search-icon h-4 w-4" />
+            <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Auto search customers…" />
+          </div>
         </div>
-        <form
-          onSubmit={(e) => { e.preventDefault(); load(); }}
-          className="flex gap-2"
-        >
-          <input
-            value={q}
-            onChange={(e) => setQ(e.target.value)}
-            placeholder="Filter customers"
-            className="rounded-xl border px-3 py-2"
-          />
-          <button type="submit" className="rounded-xl bg-sky-600 px-4 py-2 font-semibold text-white hover:bg-sky-500">
-            Search
-          </button>
-        </form>
-      </div>
-      <div className="overflow-hidden rounded-2xl bg-white shadow-sm">
         <div className="table-wrap">
-          <table className="w-full text-sm">
-            <thead className="bg-slate-50 text-xs uppercase text-slate-500">
+          <table className="ss-table">
+            <thead>
               <tr>
-                <th className="px-4 py-3 text-left">Customer</th>
-                <th className="px-4 py-3">Card UID</th>
-                <th className="px-4 py-3">Balance</th>
-                <th className="px-4 py-3">Card</th>
-                <th className="px-4 py-3">Status</th>
+                <th>Customer</th>
+                <th>Card UID</th>
+                <th className="center">Balance</th>
+                <th className="center">Card</th>
+                <th className="center">Status</th>
               </tr>
             </thead>
             <tbody>
-              {rows.map((u) => {
+              {loading && (
+                <tr><td colSpan={5} className="center text-slate-400">Searching…</td></tr>
+              )}
+              {!loading && rows.map((u) => {
                 const card = u.customer_cards?.[0];
+                const hasCard = Boolean(card?.card_uid);
                 return (
-                  <tr key={u.id} className="border-t">
-                    <td className="px-4 py-3">
-                      <div className="font-medium">{u.full_name}</div>
-                      <div className="text-xs text-slate-400">{u.email}</div>
+                  <tr key={u.id}>
+                    <td>
+                      <div className="flex items-center gap-3">
+                        <span className="ss-avatar">{(u.full_name || '?')[0]}</span>
+                        <div>
+                          <div className="font-semibold">{u.full_name}</div>
+                          <div className="text-xs text-slate-500">{u.email}</div>
+                        </div>
+                      </div>
                     </td>
-                    <td className="px-4 py-3 text-center font-mono text-xs">{card?.card_uid || '—'}</td>
-                    <td className="px-4 py-3 text-center font-semibold">{formatRwf(card?.balance || 0)}</td>
-                    <td className="px-4 py-3 text-center">
-                      <span className={`rounded-full px-2.5 py-1 text-xs font-bold ${card?.card_uid ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'}`}>
-                        {card?.card_uid ? 'Issued' : 'Needs card'}
+                    <td>{hasCard ? <span className="ss-uid">{card.card_uid}</span> : <span className="text-slate-400">—</span>}</td>
+                    <td className="center font-semibold text-teal-800">{formatRwf(card?.balance || 0)}</td>
+                    <td className="center">
+                      <span className={`ss-badge ${hasCard ? 'ss-badge-ok' : 'ss-badge-warn'}`}>
+                        {hasCard ? 'Issued' : 'Needs card'}
                       </span>
                     </td>
-                    <td className="px-4 py-3 text-center">{u.account_status}</td>
+                    <td className="center">
+                      <span className="ss-badge ss-badge-muted">{u.account_status}</span>
+                    </td>
                   </tr>
                 );
               })}
-              {!rows.length && (
-                <tr><td colSpan={5} className="px-4 py-8 text-center text-slate-400">No customers found</td></tr>
+              {!loading && !rows.length && (
+                <tr><td colSpan={5} className="center text-slate-400">No customers found</td></tr>
               )}
             </tbody>
           </table>

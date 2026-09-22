@@ -12,6 +12,7 @@ import {
   RadioTower,
   FileText,
   Settings,
+  Search,
 } from 'lucide-react';
 import DashboardLayout from '../../components/DashboardLayout';
 import api, { formatRwf } from '../../lib/api';

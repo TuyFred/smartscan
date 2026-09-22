@@ -326,12 +326,27 @@ exports.searchCustomers = async (req, res) => {
     query = query.in('id', ids);
   }
 
-  if (q) {
-    query = query.or(`full_name.ilike.%${q}%,email.ilike.%${q}%,phone.ilike.%${q}%`);
-  }
-  const { data, error } = await query;
+  let { data, error } = await query;
   if (error) return res.status(500).json({ success: false, message: error.message });
-  return res.json({ success: true, data });
+
+  if (q) {
+    const needle = q.toLowerCase();
+    const uidNeedle = normalizeCardUid(q).toLowerCase();
+    data = (data || []).filter((row) => {
+      const name = String(row.full_name || '').toLowerCase();
+      const email = String(row.email || '').toLowerCase();
+      const phone = String(row.phone || '').toLowerCase();
+      const uid = normalizeCardUid(row.customer_cards?.[0]?.card_uid || '').toLowerCase();
+      return (
+        name.includes(needle) ||
+        email.includes(needle) ||
+        phone.includes(needle) ||
+        (uidNeedle && uid.includes(uidNeedle))
+      );
+    });
+  }
+
+  return res.json({ success: true, data: data || [] });
 };
 
 exports.checkCardUid = async (req, res) => {
