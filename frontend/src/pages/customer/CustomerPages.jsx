@@ -307,9 +307,10 @@ function SessionView({ allowScan }) {
               <div className="flex justify-between"><span>Amount due</span><strong className="text-teal-700">{formatRwf(session.total_amount)}</strong></div>
               <div className="mt-2 flex justify-between"><span>Customer</span><strong>{user?.fullName || 'You'}</strong></div>
               <ul className="mt-3 list-disc space-y-1 pl-5 text-xs text-slate-500">
-                <li>1. Tap RFID card on the reader</li>
-                <li>2. Enter payment PIN on the popup</li>
-                <li>3. Balance is deducted and receipt QR is shown</li>
+                <li>1. Tap only YOUR registered RFID card</li>
+                <li>2. Enter your approved payment PIN</li>
+                <li>3. Balance is deducted from your card only</li>
+                <li>Another person&apos;s card or an unregistered card cannot pay</li>
               </ul>
             </div>
             <button

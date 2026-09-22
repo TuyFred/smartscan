@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { jsPDF } from 'jspdf';
 import {
   LayoutDashboard,
@@ -78,27 +79,36 @@ export function AdminDashboard() {
   }, [socket]);
 
   const cards = [
-    ['Users', stats?.users],
-    ['Pending approvals', stats?.pendingApprovals],
-    ['Pending PIN approvals', stats?.pendingPinApprovals],
-    ['Supermarkets', stats?.supermarkets],
-    ['Products', stats?.products],
-    ['Sessions', stats?.shopping_sessions],
-    ['Payments', stats?.payments],
+    { label: 'Users', value: stats?.users, to: '/admin/users', tone: 'bg-sky-600' },
+    { label: 'Pending approvals', value: stats?.pendingApprovals, to: '/admin/users', tone: 'bg-amber-500' },
+    { label: 'Pending PIN approvals', value: stats?.pendingPinApprovals, to: '/admin/pin-requests', tone: 'bg-orange-600' },
+    { label: 'Supermarkets', value: stats?.supermarkets, to: '/admin/supermarkets', tone: 'bg-teal-600' },
+    { label: 'Products', value: stats?.products, to: '/admin/products', tone: 'bg-indigo-600' },
+    { label: 'Sessions', value: stats?.shopping_sessions, to: '/admin/sessions', tone: 'bg-slate-800' },
+    { label: 'Payments', value: stats?.payments, to: '/admin/payments', tone: 'bg-emerald-600' },
   ];
   return (
     <div className="space-y-4">
-      <div className="flex justify-end">
-        <button type="button" onClick={exportPdfReport} className="rounded-xl bg-slate-900 px-4 py-2 font-semibold text-white">
+      <div className="flex flex-wrap items-center justify-between gap-3 rounded-3xl bg-slate-900 p-5 text-white">
+        <div>
+          <h2 className="font-display text-2xl font-bold">Admin management</h2>
+          <p className="mt-1 text-sm text-slate-300">Color-coded actions — click any card to open that workspace.</p>
+        </div>
+        <button type="button" onClick={exportPdfReport} className="rounded-xl bg-white px-4 py-2 font-semibold text-slate-900 hover:bg-slate-100">
           Export PDF report
         </button>
       </div>
       <div className="grid gap-4 md:grid-cols-3">
-        {cards.map(([label, value]) => (
-          <div key={label} className="rounded-2xl bg-white p-5 shadow-sm">
-            <div className="text-xs uppercase text-slate-400">{label}</div>
-            <div className="mt-1 font-display text-3xl font-bold">{value ?? '—'}</div>
-          </div>
+        {cards.map((card) => (
+          <Link
+            key={card.label}
+            to={card.to}
+            className={`rounded-2xl p-5 text-white shadow-sm transition hover:-translate-y-0.5 hover:shadow-md ${card.tone}`}
+          >
+            <div className="text-xs uppercase tracking-wide text-white/80">{card.label}</div>
+            <div className="mt-1 font-display text-3xl font-bold">{card.value ?? '—'}</div>
+            <div className="mt-3 text-xs font-bold uppercase tracking-wide text-white/90">Open →</div>
+          </Link>
         ))}
       </div>
     </div>
@@ -258,12 +268,14 @@ export function AdminUsers() {
                 <td className="px-4 py-3 text-center">{u.role}</td>
                 <td className="px-4 py-3 text-center">{u.email_verified ? 'Yes' : 'No'}</td>
                 <td className="px-4 py-3 text-center">{u.account_status}</td>
-                <td className="px-4 py-3 text-center space-x-2">
-                  <button type="button" className="text-teal-700" onClick={() => openEdit(u)}>Edit</button>
-                  <button type="button" className="text-amber-700" onClick={() => setStatus(u.id, 'APPROVED')}>Approve</button>
-                  <button type="button" className="text-amber-700" onClick={() => setStatus(u.id, 'SUSPENDED')}>Suspend</button>
-                  <button type="button" className="text-red-600" onClick={() => deleteUser(u.id)}>Delete</button>
-                  <button type="button" className="text-red-600" onClick={() => setStatus(u.id, 'REJECTED')}>Reject</button>
+                <td className="px-4 py-3">
+                  <div className="flex flex-wrap justify-center gap-2">
+                    <button type="button" className="rounded-lg bg-sky-600 px-2.5 py-1.5 text-xs font-bold text-white hover:bg-sky-500" onClick={() => openEdit(u)}>Edit</button>
+                    <button type="button" className="rounded-lg bg-emerald-600 px-2.5 py-1.5 text-xs font-bold text-white hover:bg-emerald-500" onClick={() => setStatus(u.id, 'APPROVED')}>Approve</button>
+                    <button type="button" className="rounded-lg bg-amber-500 px-2.5 py-1.5 text-xs font-bold text-white hover:bg-amber-400" onClick={() => setStatus(u.id, 'SUSPENDED')}>Suspend</button>
+                    <button type="button" className="rounded-lg bg-orange-600 px-2.5 py-1.5 text-xs font-bold text-white hover:bg-orange-500" onClick={() => setStatus(u.id, 'REJECTED')}>Reject</button>
+                    <button type="button" className="rounded-lg bg-red-600 px-2.5 py-1.5 text-xs font-bold text-white hover:bg-red-500" onClick={() => deleteUser(u.id)}>Delete</button>
+                  </div>
                 </td>
               </tr>
             ))}
@@ -435,13 +447,15 @@ export function AdminPinRequests() {
                   {r.otp_verified_at ? new Date(r.otp_verified_at).toLocaleString() : '—'}
                 </td>
                 <td className="px-4 py-3 text-center">{new Date(r.created_at).toLocaleString()}</td>
-                <td className="px-4 py-3 text-center space-x-3">
-                  <button type="button" className="font-semibold text-teal-700" onClick={() => review(r.id, 'APPROVED')}>
-                    Approve
-                  </button>
-                  <button type="button" className="font-semibold text-red-600" onClick={() => review(r.id, 'REJECTED')}>
-                    Reject
-                  </button>
+                <td className="px-4 py-3">
+                  <div className="flex flex-wrap justify-center gap-2">
+                    <button type="button" className="rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-bold text-white hover:bg-emerald-500" onClick={() => review(r.id, 'APPROVED')}>
+                      Approve PIN
+                    </button>
+                    <button type="button" className="rounded-lg bg-red-600 px-3 py-1.5 text-xs font-bold text-white hover:bg-red-500" onClick={() => review(r.id, 'REJECTED')}>
+                      Reject
+                    </button>
+                  </div>
                 </td>
               </tr>
             ))}

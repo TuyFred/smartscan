@@ -15,6 +15,7 @@ cardRouter.post('/', requireAuth, requireRole('ADMIN', 'CASHIER'), cardCtrl.regi
 cardRouter.post('/sell', requireAuth, requireRole('CASHIER', 'ADMIN'), cardCtrl.sellCard);
 cardRouter.post('/deposit', requireAuth, requireRole('CASHIER', 'ADMIN'), cardCtrl.deposit);
 cardRouter.get('/customers', requireAuth, requireRole('CASHIER', 'ADMIN', 'MANAGER'), cardCtrl.searchCustomers);
+cardRouter.get('/check-uid', requireAuth, requireRole('CASHIER', 'ADMIN', 'MANAGER'), cardCtrl.checkCardUid);
 cardRouter.get('/store-customers', requireAuth, requireRole('MANAGER', 'ADMIN'), cardCtrl.listStoreCustomers);
 
 const rfidRouter = express.Router();

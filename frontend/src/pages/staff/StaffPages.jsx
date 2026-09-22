@@ -61,13 +61,46 @@ export function ManagerDashboard() {
     };
   }, [socket]);
 
+  const actions = [
+    { to: '/manager/sessions', title: 'Active sessions', text: 'Watch live carts and totals', tone: 'bg-sky-600 hover:bg-sky-500', icon: ShoppingBag },
+    { to: '/manager/products', title: 'Products', text: 'Add stock and QR labels', tone: 'bg-teal-600 hover:bg-teal-500', icon: Package },
+    { to: '/manager/customers', title: 'Store customers', text: 'Only shoppers of this supermarket', tone: 'bg-indigo-600 hover:bg-indigo-500', icon: Users },
+    { to: '/manager/payments', title: 'Payments', text: 'Paid sessions and amounts', tone: 'bg-emerald-600 hover:bg-emerald-500', icon: CreditCard },
+    { to: '/manager/supermarket', title: 'My supermarket', text: 'Branches and store QR', tone: 'bg-amber-600 hover:bg-amber-500', icon: Store },
+    { to: '/manager/devices', title: 'Devices', text: 'RFID / exit gate status', tone: 'bg-slate-800 hover:bg-slate-700', icon: Shield },
+  ];
+
   return (
     <div className="space-y-6">
+      <div className="rounded-3xl bg-slate-900 p-6 text-white">
+        <h2 className="font-display text-2xl font-bold">Manager control desk</h2>
+        <p className="mt-2 max-w-2xl text-sm text-slate-300">
+          Track your store only. Each action button below is color-coded by task.
+        </p>
+      </div>
       <div className="grid gap-4 md:grid-cols-4">
         <Stat label="Active sessions" value={stats?.activeSessions || 0} />
         <Stat label="Products" value={stats?.products || 0} />
         <Stat label="Store customers" value={stats?.customers || 0} />
         <Stat label="Sales total" value={formatRwf(stats?.salesTotal || 0)} />
+      </div>
+      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+        {actions.map((item) => (
+          <Link
+            key={item.to}
+            to={item.to}
+            className={`group flex items-start gap-3 rounded-2xl px-4 py-4 text-white shadow-sm transition ${item.tone}`}
+          >
+            <item.icon className="mt-0.5 h-6 w-6 shrink-0 opacity-90" />
+            <div>
+              <div className="font-display text-lg font-bold">{item.title}</div>
+              <p className="mt-1 text-sm text-white/80">{item.text}</p>
+              <span className="mt-3 inline-block text-xs font-semibold uppercase tracking-wide text-white/90 group-hover:underline">
+                Open →
+              </span>
+            </div>
+          </Link>
+        ))}
       </div>
       <SessionsTable rows={sessions.slice(0, 8)} />
     </div>
@@ -669,20 +702,22 @@ export function CashierDashboard() {
       <div className="rounded-3xl bg-slate-900 p-6 text-white">
         <h2 className="font-display text-2xl font-bold">Cashier desk</h2>
         <p className="mt-2 max-w-2xl text-sm text-slate-300">
-          Sell RFID cards, add money, and help shoppers. You can deposit funds but you cannot deduct money from a card.
+          Sell RFID cards, add money, and help shoppers. Only a card registered to the shopping customer can pay — money is never taken from another person&apos;s card.
         </p>
       </div>
       <div className="grid gap-4 md:grid-cols-2">
         {[
-          { to: '/cashier/sell-card', title: 'Sell RFID card', text: 'Issue a physical card to a registered customer and load starting balance.', icon: CreditCard },
-          { to: '/cashier/deposits', title: 'Add money', text: 'Deposit cash onto a customer card by name or card UID.', icon: Banknote },
-          { to: '/cashier/help', title: 'Help a customer', text: 'Look up a shopper, check balance, and guide them through shopping.', icon: LifeBuoy },
-          { to: '/cashier/rfid', title: 'Read RFID', text: 'Tap or type a card UID to identify the customer at the desk.', icon: Shield },
+          { to: '/cashier/sell-card', title: 'Sell RFID card', text: 'Issue one physical UID to one customer. Blocks already-taken cards.', icon: CreditCard, tone: 'border-teal-300 hover:bg-teal-50' },
+          { to: '/cashier/deposits', title: 'Add money', text: 'Deposit cash onto a customer card by name or card UID.', icon: Banknote, tone: 'border-emerald-300 hover:bg-emerald-50' },
+          { to: '/cashier/customers', title: 'All customers', text: 'See every shopper, card UID, and balance at a glance.', icon: Users, tone: 'border-sky-300 hover:bg-sky-50' },
+          { to: '/cashier/help', title: 'Help a customer', text: 'Look up a shopper, check balance, and guide them through shopping.', icon: LifeBuoy, tone: 'border-amber-300 hover:bg-amber-50' },
+          { to: '/cashier/rfid', title: 'Read RFID', text: 'Tap or type a card UID to identify the customer at the desk.', icon: Shield, tone: 'border-indigo-300 hover:bg-indigo-50' },
         ].map((item) => (
-          <Link key={item.to} to={item.to} className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm hover:border-teal-300">
-            <item.icon className="h-6 w-6 text-teal-700" />
+          <Link key={item.to} to={item.to} className={`rounded-2xl border-2 bg-white p-5 shadow-sm transition ${item.tone}`}>
+            <item.icon className="h-6 w-6 text-slate-800" />
             <div className="mt-3 font-display text-lg font-bold">{item.title}</div>
             <p className="mt-1 text-sm text-slate-500">{item.text}</p>
+            <span className="mt-3 inline-block text-xs font-bold uppercase tracking-wide text-slate-700">Open →</span>
           </Link>
         ))}
       </div>
@@ -690,22 +725,31 @@ export function CashierDashboard() {
   );
 }
 
-function CustomerSearch({ selected, onSelect, hint }) {
+function CustomerSearch({ selected, onSelect, hint, autoLoad = true }) {
   const [q, setQ] = useState('');
   const [customers, setCustomers] = useState([]);
   const [error, setError] = useState('');
+  const [loading, setLoading] = useState(false);
 
   const search = async (e) => {
     e?.preventDefault();
     setError('');
+    setLoading(true);
     try {
-      const { data } = await api.get(`/cards/customers?q=${encodeURIComponent(q)}`);
+      const { data } = await api.get(`/cards/customers?limit=200&q=${encodeURIComponent(q)}`);
       setCustomers(data.data || []);
       if (!(data.data || []).length) setError('No matching customers');
     } catch (err) {
       setError(err.response?.data?.message || 'Search failed');
+    } finally {
+      setLoading(false);
     }
   };
+
+  useEffect(() => {
+    if (autoLoad) search();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [autoLoad]);
 
   return (
     <div className="space-y-3">
@@ -719,29 +763,44 @@ function CustomerSearch({ selected, onSelect, hint }) {
             className="w-full rounded-xl border py-2 pl-9 pr-3"
           />
         </div>
-        <button type="submit" className="rounded-xl bg-slate-900 px-4 py-2 font-semibold text-white">
-          Search
+        <button type="submit" className="rounded-xl bg-sky-600 px-4 py-2 font-semibold text-white hover:bg-sky-500">
+          {loading ? 'Loading…' : 'Search / refresh'}
         </button>
       </form>
       {hint && <p className="text-xs text-slate-500">{hint}</p>}
       {error && <div className="rounded-xl bg-amber-50 px-3 py-2 text-sm text-amber-800">{error}</div>}
       <div className="grid gap-3 md:grid-cols-2">
-        {customers.map((c) => (
-          <button
-            key={c.id}
-            type="button"
-            onClick={() => onSelect(c)}
-            className={`rounded-2xl border p-4 text-left ${selected?.id === c.id ? 'border-teal-500 bg-teal-50' : 'border-slate-200 bg-white'}`}
-          >
-            <div className="font-semibold">{c.full_name}</div>
-            <div className="text-sm text-slate-500">{c.email}</div>
-            <div className="text-xs text-slate-400">{c.phone || 'No phone'}</div>
-            <div className="mt-1 text-sm">
-              Card: {c.customer_cards?.[0]?.card_uid || 'None yet'} · Balance:{' '}
-              {formatRwf(c.customer_cards?.[0]?.balance || 0)}
-            </div>
-          </button>
-        ))}
+        {customers.map((c) => {
+          const card = c.customer_cards?.[0];
+          const hasCard = Boolean(card?.card_uid);
+          return (
+            <button
+              key={c.id}
+              type="button"
+              onClick={() => onSelect(c)}
+              className={`rounded-2xl border p-4 text-left transition hover:shadow-md ${
+                selected?.id === c.id ? 'border-teal-500 bg-teal-50 ring-2 ring-teal-200' : 'border-slate-200 bg-white'
+              }`}
+            >
+              <div className="flex items-start justify-between gap-2">
+                <div className="font-semibold">{c.full_name}</div>
+                <span
+                  className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-bold uppercase ${
+                    hasCard ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'
+                  }`}
+                >
+                  {hasCard ? 'Has card' : 'No card'}
+                </span>
+              </div>
+              <div className="text-sm text-slate-500">{c.email}</div>
+              <div className="text-xs text-slate-400">{c.phone || 'No phone'}</div>
+              <div className="mt-2 rounded-xl bg-slate-50 px-2.5 py-1.5 font-mono text-xs text-slate-700">
+                UID: {card?.card_uid || '— not issued —'}
+              </div>
+              <div className="mt-1 text-sm font-semibold text-teal-800">Balance: {formatRwf(card?.balance || 0)}</div>
+            </button>
+          );
+        })}
       </div>
     </div>
   );
@@ -756,6 +815,25 @@ export function CashierSellCard() {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const [waitingTap, setWaitingTap] = useState(false);
+  const [uidStatus, setUidStatus] = useState(null);
+  const [checkingUid, setCheckingUid] = useState(false);
+
+  const checkUid = async (uidValue) => {
+    const uid = String(uidValue || '').trim();
+    if (!uid) {
+      setUidStatus(null);
+      return;
+    }
+    setCheckingUid(true);
+    try {
+      const { data } = await api.get(`/cards/check-uid?uid=${encodeURIComponent(uid)}`);
+      setUidStatus(data.data);
+    } catch (err) {
+      setUidStatus({ taken: false, available: true, message: err.response?.data?.message || 'Could not check UID' });
+    } finally {
+      setCheckingUid(false);
+    }
+  };
 
   useEffect(() => {
     if (!socket) return undefined;
@@ -764,14 +842,24 @@ export function CashierSellCard() {
       if (!uid) return;
       setCardUid(uid);
       setWaitingTap(false);
+      checkUid(uid);
     };
     socket.on('rfid:card-read', onRead);
     return () => socket.off('rfid:card-read', onRead);
   }, [socket]);
 
+  useEffect(() => {
+    const t = setTimeout(() => checkUid(cardUid), 350);
+    return () => clearTimeout(t);
+  }, [cardUid]);
+
   const sell = async (e) => {
     e.preventDefault();
     setError('');
+    if (uidStatus?.taken && uidStatus?.owner?.id !== selected?.id) {
+      setError(uidStatus.message || 'This card UID is already taken by another customer');
+      return;
+    }
     setLoading(true);
     try {
       const { data } = await api.post('/cards/sell', {
@@ -782,6 +870,7 @@ export function CashierSellCard() {
       setResult(data.data);
       setCardUid('');
       setAmount('');
+      setUidStatus(null);
     } catch (err) {
       setError(err.response?.data?.message || 'Could not sell card');
     } finally {
@@ -789,33 +878,45 @@ export function CashierSellCard() {
     }
   };
 
+  const uidBlocked = Boolean(uidStatus?.taken && uidStatus?.owner?.id !== selected?.id);
+
   return (
     <div className="space-y-4">
-      <div>
+      <div className="rounded-3xl bg-slate-900 p-5 text-white">
         <h2 className="font-display text-xl font-bold">Sell RFID card</h2>
-        <p className="text-sm text-slate-500">
-          Find a registered customer, tap the physical card (or type the UID), and optionally load cash onto it.
+        <p className="mt-1 text-sm text-slate-300">
+          Pick a customer, tap one physical card, and sell that UID only once. If the UID is already taken, selling is blocked.
         </p>
       </div>
-      <CustomerSearch selected={selected} onSelect={setSelected} hint="The customer must already have a SMARTSCAN account." />
+      <CustomerSearch
+        selected={selected}
+        onSelect={setSelected}
+        hint="All registered customers are listed. Green = already has a card. Amber = needs a card."
+      />
       {selected && (
         <form onSubmit={sell} className="space-y-3 rounded-2xl bg-white p-5 shadow-sm">
           <h3 className="font-semibold">Issue card to {selected.full_name}</h3>
+          {selected.customer_cards?.[0]?.card_uid && (
+            <div className="rounded-xl border border-sky-200 bg-sky-50 px-3 py-2 text-sm text-sky-900">
+              Current card: <span className="font-mono font-semibold">{selected.customer_cards[0].card_uid}</span>
+              {' '}· Selling a new UID will replace it for this customer only.
+            </div>
+          )}
           {error && <div className="rounded-xl bg-red-50 px-3 py-2 text-sm text-red-700">{error}</div>}
           <label className="block text-sm font-medium">
-            Physical RFID card UID
+            Physical RFID card UID (one card → one customer)
             <div className="mt-1 flex gap-2">
               <input
                 required
                 value={cardUid}
                 onChange={(e) => setCardUid(e.target.value)}
                 placeholder="Tap card or type UID"
-                className="w-full rounded-xl border px-3 py-2"
+                className={`w-full rounded-xl border px-3 py-2 ${uidBlocked ? 'border-red-400 bg-red-50' : uidStatus?.available ? 'border-emerald-400 bg-emerald-50' : ''}`}
               />
               <button
                 type="button"
-                onClick={() => { setWaitingTap(true); setCardUid(''); }}
-                className="shrink-0 rounded-xl bg-slate-900 px-3 py-2 text-sm font-semibold text-white"
+                onClick={() => { setWaitingTap(true); setCardUid(''); setUidStatus(null); }}
+                className="shrink-0 rounded-xl bg-indigo-600 px-3 py-2 text-sm font-semibold text-white hover:bg-indigo-500"
               >
                 {waitingTap ? 'Waiting…' : 'Tap card'}
               </button>
@@ -823,7 +924,28 @@ export function CashierSellCard() {
           </label>
           {waitingTap && (
             <div className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
-              Tap the blank RFID card on the reader now. The UID will fill in automatically.
+              Tap the RFID card on the reader now. The UID will fill in automatically.
+            </div>
+          )}
+          {checkingUid && <p className="text-xs text-slate-500">Checking if this UID is already taken…</p>}
+          {uidStatus && !checkingUid && (
+            <div
+              className={`rounded-xl px-3 py-2 text-sm ${
+                uidBlocked
+                  ? 'border border-red-200 bg-red-50 text-red-800'
+                  : 'border border-emerald-200 bg-emerald-50 text-emerald-900'
+              }`}
+            >
+              {uidBlocked ? (
+                <>
+                  <strong>Already taken.</strong> Owned by {uidStatus.owner?.fullName || 'another customer'}
+                  {uidStatus.owner?.email ? ` (${uidStatus.owner.email})` : ''}. Choose a different card.
+                </>
+              ) : uidStatus.owner?.id === selected.id ? (
+                <>This UID is already linked to <strong>{selected.full_name}</strong>. You can re-confirm or load money.</>
+              ) : (
+                <><strong>Available.</strong> {uidStatus.message || 'Ready to sell this card UID.'}</>
+              )}
             </div>
           )}
           <label className="block text-sm font-medium">
@@ -837,14 +959,18 @@ export function CashierSellCard() {
               className="mt-1 w-full rounded-xl border px-3 py-2"
             />
           </label>
-          <button disabled={loading} className="rounded-xl bg-teal-600 px-4 py-2.5 font-semibold text-white disabled:opacity-60">
-            {loading ? 'Selling…' : 'Sell card'}
+          <button
+            disabled={loading || uidBlocked || !cardUid.trim()}
+            className="rounded-xl bg-teal-600 px-4 py-2.5 font-semibold text-white hover:bg-teal-500 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            {loading ? 'Selling…' : uidBlocked ? 'Card already taken' : 'Sell card'}
           </button>
         </form>
       )}
       {result && (
-        <div className="rounded-2xl bg-green-50 p-5 text-green-900">
-          Card {result.card?.card_uid} sold to {result.customer?.full_name}. New balance: {formatRwf(result.newBalance)}.
+        <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-5 text-emerald-950">
+          Card <span className="font-mono font-bold">{result.card?.card_uid}</span> sold to {result.customer?.full_name}.
+          New balance: {formatRwf(result.newBalance)}.
         </div>
       )}
     </div>
@@ -958,35 +1084,69 @@ export function CashierDeposits() {
 
 export function CashierCustomers() {
   const [rows, setRows] = useState([]);
-  useEffect(() => {
-    api.get('/cards/customers').then((r) => setRows(r.data.data || []));
-  }, []);
+  const [q, setQ] = useState('');
+  const load = () => api.get(`/cards/customers?limit=200&q=${encodeURIComponent(q)}`).then((r) => setRows(r.data.data || []));
+  useEffect(() => { load(); }, []);
   return (
-    <div className="overflow-hidden rounded-2xl bg-white shadow-sm">
-      <div className="table-wrap">
-        <table className="w-full text-sm">
-          <thead className="bg-slate-50 text-xs uppercase text-slate-500">
-            <tr>
-              <th className="px-4 py-3 text-left">Customer</th>
-              <th className="px-4 py-3">Card</th>
-              <th className="px-4 py-3">Balance</th>
-              <th className="px-4 py-3">Status</th>
-            </tr>
-          </thead>
-          <tbody>
-            {rows.map((u) => (
-              <tr key={u.id} className="border-t">
-                <td className="px-4 py-3">
-                  <div className="font-medium">{u.full_name}</div>
-                  <div className="text-xs text-slate-400">{u.email}</div>
-                </td>
-                <td className="px-4 py-3 text-center">{u.customer_cards?.[0]?.card_uid || '—'}</td>
-                <td className="px-4 py-3 text-center font-semibold">{formatRwf(u.customer_cards?.[0]?.balance || 0)}</td>
-                <td className="px-4 py-3 text-center">{u.account_status}</td>
+    <div className="space-y-4">
+      <div className="flex flex-col gap-3 rounded-2xl bg-white p-4 shadow-sm sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <h2 className="font-display text-xl font-bold">All customers</h2>
+          <p className="text-sm text-slate-500">See who has a card, UID, and balance before selling or depositing.</p>
+        </div>
+        <form
+          onSubmit={(e) => { e.preventDefault(); load(); }}
+          className="flex gap-2"
+        >
+          <input
+            value={q}
+            onChange={(e) => setQ(e.target.value)}
+            placeholder="Filter customers"
+            className="rounded-xl border px-3 py-2"
+          />
+          <button type="submit" className="rounded-xl bg-sky-600 px-4 py-2 font-semibold text-white hover:bg-sky-500">
+            Search
+          </button>
+        </form>
+      </div>
+      <div className="overflow-hidden rounded-2xl bg-white shadow-sm">
+        <div className="table-wrap">
+          <table className="w-full text-sm">
+            <thead className="bg-slate-50 text-xs uppercase text-slate-500">
+              <tr>
+                <th className="px-4 py-3 text-left">Customer</th>
+                <th className="px-4 py-3">Card UID</th>
+                <th className="px-4 py-3">Balance</th>
+                <th className="px-4 py-3">Card</th>
+                <th className="px-4 py-3">Status</th>
               </tr>
-            ))}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {rows.map((u) => {
+                const card = u.customer_cards?.[0];
+                return (
+                  <tr key={u.id} className="border-t">
+                    <td className="px-4 py-3">
+                      <div className="font-medium">{u.full_name}</div>
+                      <div className="text-xs text-slate-400">{u.email}</div>
+                    </td>
+                    <td className="px-4 py-3 text-center font-mono text-xs">{card?.card_uid || '—'}</td>
+                    <td className="px-4 py-3 text-center font-semibold">{formatRwf(card?.balance || 0)}</td>
+                    <td className="px-4 py-3 text-center">
+                      <span className={`rounded-full px-2.5 py-1 text-xs font-bold ${card?.card_uid ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'}`}>
+                        {card?.card_uid ? 'Issued' : 'Needs card'}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3 text-center">{u.account_status}</td>
+                  </tr>
+                );
+              })}
+              {!rows.length && (
+                <tr><td colSpan={5} className="px-4 py-8 text-center text-slate-400">No customers found</td></tr>
+              )}
+            </tbody>
+          </table>
+        </div>
       </div>
     </div>
   );

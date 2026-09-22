@@ -166,7 +166,17 @@ exports.sellCard = async (req, res) => {
       .eq('card_uid', uid)
       .maybeSingle();
     if (taken && taken.customer_id !== customerId) {
-      return res.status(409).json({ success: false, message: 'This RFID card is already issued to another customer' });
+      const { data: owner } = await supabase
+        .from('users')
+        .select('id, full_name, email, phone')
+        .eq('id', taken.customer_id)
+        .maybeSingle();
+      return res.status(409).json({
+        success: false,
+        code: 'CARD_TAKEN',
+        message: `This RFID card is already sold/issued to ${owner?.full_name || 'another customer'} (${owner?.email || 'unknown'}). Choose a different card.`,
+        data: { taken: true, owner },
+      });
     }
 
     const { data: existing } = await supabase
@@ -307,7 +317,8 @@ exports.searchCustomers = async (req, res) => {
     .from('users')
     .select('id, full_name, email, phone, profile_image, account_status, customer_cards(*)')
     .eq('role_id', role.id)
-    .limit(50);
+    .order('full_name', { ascending: true })
+    .limit(Number(req.query.limit) || 200);
 
   if (req.user.role === 'MANAGER') {
     const ids = await customerIdsForSupermarket(req.user.supermarketId);
@@ -321,6 +332,46 @@ exports.searchCustomers = async (req, res) => {
   const { data, error } = await query;
   if (error) return res.status(500).json({ success: false, message: error.message });
   return res.json({ success: true, data });
+};
+
+exports.checkCardUid = async (req, res) => {
+  try {
+    const uid = normalizeCardUid(req.query.uid || req.query.cardUid || '');
+    if (!uid) {
+      return res.status(400).json({ success: false, message: 'uid required' });
+    }
+
+    const card = await findCardByUid(uid);
+    if (!card) {
+      return res.json({
+        success: true,
+        data: { uid, available: true, taken: false, message: 'Card UID is free — ready to sell' },
+      });
+    }
+
+    return res.json({
+      success: true,
+      data: {
+        uid: normalizeCardUid(card.card_uid),
+        available: false,
+        taken: true,
+        message: 'This card UID is already issued',
+        owner: {
+          id: card.customer_id,
+          fullName: card.users?.full_name || null,
+          email: card.users?.email || null,
+          phone: card.users?.phone || null,
+        },
+        card: {
+          id: card.id,
+          balance: money(card.balance),
+          status: card.status,
+        },
+      },
+    });
+  } catch (err) {
+    return res.status(500).json({ success: false, message: err.message });
+  }
 };
 
 exports.listStoreCustomers = async (req, res) => {
@@ -440,6 +491,27 @@ exports.rfidRead = async (req, res) => {
 
     let authorization = null;
     if (session && amountDue > 0) {
+      // Only the card OWNER can pay their OWN active shopping session.
+      // An unregistered card never reaches here; another customer's card
+      // can only authorize that other customer's session (never yours).
+      if (session.customer_id !== card.customer_id) {
+        publishRfidCommand('WRONG_CUSTOMER');
+        emitRfidCardRead(io, req, {
+          cardUid: card.card_uid,
+          customer: card.users,
+          card: { id: card.id, cardUid: card.card_uid, balance: money(card.balance), status: card.status },
+          cardBalance: money(card.balance),
+          amountDue: 0,
+          activeSession: null,
+          authorizationId: null,
+          status: 'WRONG_CUSTOMER',
+        });
+        return res.status(403).json({
+          success: false,
+          code: 'WRONG_CARD',
+          message: 'This card does not belong to the shopper for this session. Money was NOT removed.',
+        });
+      }
       // Expire older pending auths for this session so only the latest tap is valid
       await supabase
         .from('payment_authorizations')
@@ -562,6 +634,44 @@ exports.authorizePayment = async (req, res) => {
     }
 
     const { data: card } = await supabase.from('customer_cards').select('*').eq('id', auth.card_id).single();
+    if (!card) {
+      publishRfidCommand('NOT_REGISTERED');
+      return res.status(404).json({ success: false, message: 'Card not found. Payment cancelled. Money was NOT removed.' });
+    }
+
+    // SECURITY: only the card registered to THIS logged-in customer can pay THEIR session
+    if (card.customer_id !== req.user.id) {
+      publishRfidCommand('WRONG_CUSTOMER');
+      return res.status(403).json({
+        success: false,
+        code: 'WRONG_CARD',
+        message: 'This RFID card is not registered to your account. You cannot pay with another customer\'s card. Money was NOT removed.',
+      });
+    }
+    if (session.customer_id !== req.user.id) {
+      publishRfidCommand('WRONG_CUSTOMER');
+      return res.status(403).json({
+        success: false,
+        code: 'WRONG_SESSION',
+        message: 'This shopping session does not belong to you. Money was NOT removed.',
+      });
+    }
+    if (auth.customer_id !== card.customer_id || auth.card_id !== card.id) {
+      publishRfidCommand('WRONG_CUSTOMER');
+      return res.status(403).json({
+        success: false,
+        code: 'CARD_MISMATCH',
+        message: 'Card and customer do not match for this payment. Money was NOT removed.',
+      });
+    }
+    if (card.status !== 'ACTIVE') {
+      publishRfidCommand('PAYMENT_DENIED');
+      return res.status(400).json({
+        success: false,
+        message: `Card is ${card.status}. Only an active card registered to you can pay.`,
+      });
+    }
+
     const balance = money(card.balance);
     const amount = money(total);
 

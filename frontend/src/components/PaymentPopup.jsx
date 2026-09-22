@@ -167,7 +167,7 @@ export default function PaymentPopup() {
             <div className="mt-2 text-center text-[11px] font-medium text-teal-800">Type your 4–6 digit PIN here</div>
           </div>
           <div className="rounded-xl border border-teal-100 bg-teal-50 px-3 py-2 text-xs text-teal-800">
-            After a correct PIN, the amount is deducted immediately and a receipt QR is shown for the exit gate.
+            Only the RFID card registered to your account can pay this cart. Another customer&apos;s card or an unregistered card cannot remove money.
           </div>
           <div className="grid grid-cols-2 gap-3">
             <button type="button" onClick={cancel} className="rounded-xl border border-slate-200 py-3 font-semibold">
